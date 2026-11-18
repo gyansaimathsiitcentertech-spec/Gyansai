@@ -1,0 +1,283 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Primitives
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email_verified == true && (
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+          request.auth.token.email == 'gyansaimathsiitcentertech@gmail.com'
+        );
+    }
+
+    // Validation Helpers (No existing() or diff() inside helpers)
+    function isValidAdminUser(data) {
+      return data.keys().hasAll(['email', 'role', 'createdAt']) &&
+        data.keys().hasOnly(['email', 'name', 'role', 'createdAt']) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.role == 'admin' &&
+        data.createdAt is timestamp &&
+        (!('name' in data) || (data.name is string && data.name.size() <= 120));
+    }
+
+    function isValidFolder(data) {
+      return data.keys().hasAll(['id', 'name', 'targetClass', 'createdByUid', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'name', 'description', 'targetClass', 'color', 'examCount', 'createdByUid', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 160 &&
+        data.targetClass is string && data.targetClass.size() >= 1 && data.targetClass.size() <= 40 &&
+        data.createdByUid is string && data.createdByUid == request.auth.uid && data.createdByUid.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 500)) &&
+        (!('color' in data) || (data.color is string && data.color.size() <= 40)) &&
+        (!('examCount' in data) || (data.examCount is int && data.examCount >= 0 && data.examCount <= 10000));
+    }
+
+    function isValidExam(data) {
+      return data.keys().hasAll(['id', 'code', 'codeLower', 'title', 'targetClass', 'durationMinutes', 'status', 'isPublic', 'createdByUid', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'id', 'code', 'codeLower', 'title', 'folderId', 'folderName',
+          'targetClass', 'examCategory', 'durationMinutes', 'totalMarks',
+          'positiveMarks', 'negativeMarks', 'passPercentage', 'status',
+          'isPublic', 'questionIds', 'createdByUid', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.code is string && data.code.size() >= 1 && data.code.size() <= 80 &&
+        data.codeLower is string && data.codeLower.size() >= 1 && data.codeLower.size() <= 80 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.targetClass is string && data.targetClass.size() >= 1 && data.targetClass.size() <= 40 &&
+        data.durationMinutes is int && data.durationMinutes >= 1 && data.durationMinutes <= 600 &&
+        data.status in ['Live', 'Draft', 'Scheduled', 'Completed', 'Active', 'Published'] &&
+        data.isPublic is bool &&
+        data.createdByUid is string && data.createdByUid == request.auth.uid && data.createdByUid.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp &&
+        (!('folderId' in data) || (data.folderId is string && data.folderId.size() <= 128)) &&
+        (!('folderName' in data) || (data.folderName is string && data.folderName.size() <= 160)) &&
+        (!('examCategory' in data) || (data.examCategory is string && data.examCategory.size() <= 40)) &&
+        (!('totalMarks' in data) || (data.totalMarks is int && data.totalMarks >= 0 && data.totalMarks <= 10000)) &&
+        (!('positiveMarks' in data) || (data.positiveMarks is int && data.positiveMarks >= 0 && data.positiveMarks <= 100)) &&
+        (!('negativeMarks' in data) || (data.negativeMarks is int && data.negativeMarks >= -100 && data.negativeMarks <= 0)) &&
+        (!('passPercentage' in data) || (data.passPercentage is int && data.passPercentage >= 0 && data.passPercentage <= 100)) &&
+        (!('questionIds' in data) || (
+          data.questionIds is list &&
+          data.questionIds.size() <= 200 &&
+          (data.questionIds.size() == 0 || data.questionIds[0] is string)
+        ));
+    }
+
+    function isValidQuestion(data, examId) {
+      return data.keys().hasAll(['id', 'examId', 'code', 'subject', 'type', 'correctAnswer', 'marksPositive', 'marksNegative', 'isPublic', 'createdByUid', 'createdAt']) &&
+        data.keys().hasOnly([
+          'id', 'examId', 'orderIndex', 'code', 'subject', 'chapter', 'topic',
+          'type', 'questionType', 'difficulty', 'targetClass', 'folderId',
+          'folderName', 'tag', 'questionText', 'questionImageUrl',
+          'questionImagePath', 'imageUrl', 'formulaNote', 'options',
+          'correctAnswer', 'marks', 'negativeMarks', 'marksPositive',
+          'marksNegative', 'explanation', 'isPublic', 'createdByUid', 'createdAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.examId == examId &&
+        data.code is string && data.code.size() >= 1 && data.code.size() <= 80 &&
+        data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 80 &&
+        data.type in ['single_choice', 'multiple_choice', 'numerical', 'integer'] &&
+        (!('questionType' in data) || (data.questionType in ['image', 'text'])) &&
+        data.correctAnswer is string && data.correctAnswer.size() >= 1 && data.correctAnswer.size() <= 64 &&
+        data.marksPositive is int && data.marksPositive >= 0 && data.marksPositive <= 100 &&
+        data.marksNegative is int && data.marksNegative >= -100 && data.marksNegative <= 0 &&
+        data.isPublic is bool &&
+        data.createdByUid is string && data.createdByUid == request.auth.uid && data.createdByUid.size() <= 128 &&
+        data.createdAt is timestamp &&
+        (!('questionText' in data) || (data.questionText is string && data.questionText.size() <= 4000)) &&
+        (
+          ('questionText' in data && data.questionText is string && data.questionText.size() >= 1) ||
+          (('questionImageUrl' in data && data.questionImageUrl is string && data.questionImageUrl.size() >= 1) ||
+           ('imageUrl' in data && data.imageUrl is string && data.imageUrl.size() >= 1))
+        ) &&
+        (!('orderIndex' in data) || (data.orderIndex is int && data.orderIndex >= 0 && data.orderIndex <= 500)) &&
+        (!('chapter' in data) || (data.chapter is string && data.chapter.size() <= 160)) &&
+        (!('topic' in data) || (data.topic is string && data.topic.size() <= 160)) &&
+        (!('difficulty' in data) || (data.difficulty is string && data.difficulty.size() <= 40)) &&
+        (!('targetClass' in data) || (data.targetClass is string && data.targetClass.size() <= 40)) &&
+        (!('folderId' in data) || (data.folderId is string && data.folderId.size() <= 128)) &&
+        (!('folderName' in data) || (data.folderName is string && data.folderName.size() <= 160)) &&
+        (!('tag' in data) || (data.tag is string && data.tag.size() <= 40)) &&
+        (!('questionImageUrl' in data) || (data.questionImageUrl is string && data.questionImageUrl.size() <= 900000)) &&
+        (!('questionImagePath' in data) || (data.questionImagePath is string && data.questionImagePath.size() <= 300)) &&
+        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 900000)) &&
+        (!('formulaNote' in data) || (data.formulaNote is string && data.formulaNote.size() <= 1000)) &&
+        (!('marks' in data) || (data.marks is int && data.marks >= 0 && data.marks <= 100)) &&
+        (!('negativeMarks' in data) || (data.negativeMarks is int && data.negativeMarks >= -100 && data.negativeMarks <= 0)) &&
+        (!('explanation' in data) || (data.explanation is string && data.explanation.size() <= 3000)) &&
+        (!('options' in data) || (
+          data.options is list &&
+          data.options.size() <= 6 &&
+          (data.options.size() == 0 || data.options[0] is map)
+        ));
+    }
+
+    function isValidPublicRegistration(data) {
+      return data.keys().hasAll(['id', 'name', 'phone', 'targetClass', 'collegeName', 'examId', 'submittedAt']) &&
+        data.keys().hasOnly(['id', 'name', 'phone', 'targetClass', 'collegeName', 'rollNo', 'examId', 'examTitle', 'submittedAt']) &&
+        isValidId(data.id) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+        data.phone is string && data.phone.size() >= 8 && data.phone.size() <= 20 &&
+        data.targetClass is string && data.targetClass.size() >= 1 && data.targetClass.size() <= 60 &&
+        data.collegeName is string && data.collegeName.size() >= 1 && data.collegeName.size() <= 200 &&
+        isValidId(data.examId) &&
+        data.submittedAt is timestamp &&
+        (!('rollNo' in data) || (data.rollNo is string && data.rollNo.size() <= 60)) &&
+        (!('examTitle' in data) || (data.examTitle is string && data.examTitle.size() <= 200));
+    }
+
+    function isValidExamAttempt(data) {
+      return data.keys().hasAll(['id', 'examId', 'examTitle', 'studentName', 'totalScore', 'maxScore', 'correctCount', 'incorrectCount', 'unattemptedCount', 'status', 'submittedAt']) &&
+        data.keys().hasOnly([
+          'id', 'examId', 'examTitle', 'examCode', 'studentId', 'studentName',
+          'studentRollNo', 'studentPhone', 'studentCollege', 'totalScore',
+          'maxScore', 'percentage', 'accuracy', 'correctCount', 'incorrectCount',
+          'unattemptedCount', 'timeTakenMinutes', 'status', 'submittedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.examId) &&
+        data.examTitle is string && data.examTitle.size() >= 1 && data.examTitle.size() <= 200 &&
+        data.studentName is string && data.studentName.size() >= 1 && data.studentName.size() <= 120 &&
+        (data.totalScore is int || data.totalScore is float) &&
+        (data.maxScore is int || data.maxScore is float) && data.maxScore >= 0 &&
+        data.correctCount is int && data.correctCount >= 0 && data.correctCount <= 500 &&
+        data.incorrectCount is int && data.incorrectCount >= 0 && data.incorrectCount <= 500 &&
+        data.unattemptedCount is int && data.unattemptedCount >= 0 && data.unattemptedCount <= 500 &&
+        data.status in ['Evaluated', 'Submitted'] &&
+        data.submittedAt is timestamp &&
+        (!('examCode' in data) || (data.examCode is string && data.examCode.size() <= 80)) &&
+        (!('studentId' in data) || (data.studentId is string && data.studentId.size() <= 128)) &&
+        (!('studentRollNo' in data) || (data.studentRollNo is string && data.studentRollNo.size() <= 60)) &&
+        (!('studentPhone' in data) || (data.studentPhone is string && data.studentPhone.size() <= 20)) &&
+        (!('studentCollege' in data) || (data.studentCollege is string && data.studentCollege.size() <= 200)) &&
+        (!('percentage' in data) || (data.percentage is int || data.percentage is float)) &&
+        (!('accuracy' in data) || (data.accuracy is int || data.accuracy is float)) &&
+        (!('timeTakenMinutes' in data) || (data.timeTakenMinutes is int && data.timeTakenMinutes >= 0 && data.timeTakenMinutes <= 1000));
+    }
+
+    // 1. Admins Allowlist
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isAdmin() || (isSignedIn() && request.auth.uid == adminId));
+      allow list: if isAdmin();
+      allow create: if isAdmin() && isValidId(adminId) && isValidAdminUser(incoming()) && incoming().createdAt == request.time;
+      allow update: if isAdmin() && isValidId(adminId) && isValidAdminUser(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['email', 'name', 'role']);
+      allow delete: if isAdmin() && isValidId(adminId);
+    }
+
+    // 2. Exam Folders (Admin managed)
+    match /folders/{folderId} {
+      allow get: if isValidId(folderId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isAdmin() && isValidId(folderId) && isValidFolder(incoming()) &&
+        incoming().id == folderId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(folderId) && isValidFolder(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdByUid == existing().createdByUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'targetClass', 'color', 'examCount', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(folderId);
+    }
+
+    // 3. Exam Papers (Public read ONLY when isPublic == true; Admin full control)
+    match /exams/{examId} {
+      allow get: if isValidId(examId) && (isAdmin() || existing().isPublic == true);
+      allow list: if isAdmin() || resource.data.isPublic == true;
+      allow create: if isAdmin() && isValidId(examId) && isValidExam(incoming()) &&
+        incoming().id == examId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(examId) && isValidExam(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdByUid == existing().createdByUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'code', 'codeLower', 'title', 'folderId', 'folderName',
+          'targetClass', 'examCategory', 'durationMinutes', 'totalMarks',
+          'positiveMarks', 'negativeMarks', 'passPercentage', 'status',
+          'isPublic', 'questionIds', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(examId);
+
+      // 4. Scoped Question Items & Original Question Images
+      match /questions/{questionId} {
+        allow get: if isValidId(examId) && isValidId(questionId) && (
+          isAdmin() ||
+          (existing().isPublic == true && get(/databases/$(database)/documents/exams/$(examId)).data.isPublic == true)
+        );
+        allow list: if isAdmin() || resource.data.isPublic == true;
+        allow create: if isAdmin() && isValidId(examId) && isValidId(questionId) &&
+          exists(/databases/$(database)/documents/exams/$(examId)) &&
+          isValidQuestion(incoming(), examId) &&
+          incoming().id == questionId &&
+          incoming().createdAt == request.time;
+        allow update: if isAdmin() && isValidId(examId) && isValidId(questionId) &&
+          isValidQuestion(incoming(), examId) &&
+          incoming().id == existing().id &&
+          incoming().examId == existing().examId &&
+          incoming().createdByUid == existing().createdByUid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'orderIndex', 'code', 'subject', 'chapter', 'topic', 'type',
+            'questionType', 'difficulty', 'targetClass', 'folderId',
+            'folderName', 'tag', 'questionText', 'questionImageUrl',
+            'questionImagePath', 'imageUrl', 'formulaNote', 'options',
+            'correctAnswer', 'marks', 'negativeMarks', 'marksPositive',
+            'marksNegative', 'explanation', 'isPublic'
+          ]);
+        allow delete: if isAdmin() && isValidId(examId) && isValidId(questionId);
+      }
+    }
+
+    // 5. Public Registrations (Write-once for mobile candidates; Strict PII isolation)
+    match /public_registrations/{regId} {
+      allow get, list, update, delete: if isAdmin();
+      allow create: if isValidId(regId) &&
+        isValidPublicRegistration(incoming()) &&
+        incoming().id == regId &&
+        incoming().submittedAt == request.time &&
+        exists(/databases/$(database)/documents/exams/$(incoming().examId));
+    }
+
+    // 6. Exam Attempts / Results (Write-once for mobile candidates; Strict PII isolation)
+    match /exam_attempts/{attemptId} {
+      allow get, list, update, delete: if isAdmin();
+      allow create: if isValidId(attemptId) &&
+        isValidExamAttempt(incoming()) &&
+        incoming().id == attemptId &&
+        incoming().submittedAt == request.time &&
+        exists(/databases/$(database)/documents/exams/$(incoming().examId));
+    }
+  }
+}

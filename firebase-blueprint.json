@@ -1,0 +1,455 @@
+{
+  "entities": {
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Authorized faculty administrator record",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254,
+          "minLength": 3
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["email", "role", "createdAt"]
+    },
+    "ExamFolder": {
+      "title": "ExamFolder",
+      "description": "Class or category folder organizing exams and uploaded questions",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "targetClass": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "color": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "examCount": {
+          "type": "integer"
+        },
+        "createdByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "name", "targetClass", "createdByUid", "createdAt", "updatedAt"]
+    },
+    "ExamPaper": {
+      "title": "ExamPaper",
+      "description": "Published or draft online CBT examination metadata",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "codeLower": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "folderId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "folderName": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "targetClass": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "examCategory": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "durationMinutes": {
+          "type": "integer"
+        },
+        "totalMarks": {
+          "type": "integer"
+        },
+        "positiveMarks": {
+          "type": "integer"
+        },
+        "negativeMarks": {
+          "type": "integer"
+        },
+        "passPercentage": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Live", "Draft", "Scheduled", "Completed", "Active", "Published"]
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "questionIds": {
+          "type": "array",
+          "description": "Bounded list of up to 200 question IDs belonging to this exam"
+        },
+        "createdByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "code", "codeLower", "title", "targetClass", "durationMinutes", "status", "isPublic", "createdByUid", "createdAt", "updatedAt"]
+    },
+    "ExamQuestion": {
+      "title": "ExamQuestion",
+      "description": "Individual question document preserving original image URL/path and text metadata scoped to an exam",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "examId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "orderIndex": {
+          "type": "integer"
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "subject": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "chapter": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "topic": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "type": {
+          "type": "string",
+          "enum": ["single_choice", "multiple_choice", "numerical", "integer"]
+        },
+        "questionType": {
+          "type": "string",
+          "enum": ["image", "text"]
+        },
+        "difficulty": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "targetClass": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "folderId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "folderName": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "tag": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "questionText": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "questionImageUrl": {
+          "type": "string",
+          "maxLength": 900000
+        },
+        "questionImagePath": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "imageUrl": {
+          "type": "string",
+          "maxLength": 900000
+        },
+        "formulaNote": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "options": {
+          "type": "array",
+          "description": "Up to 6 MCQ choice maps"
+        },
+        "correctAnswer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "marks": {
+          "type": "integer"
+        },
+        "negativeMarks": {
+          "type": "integer"
+        },
+        "marksPositive": {
+          "type": "integer"
+        },
+        "marksNegative": {
+          "type": "integer"
+        },
+        "explanation": {
+          "type": "string",
+          "maxLength": 3000
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "createdByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "examId", "code", "subject", "type", "correctAnswer", "marksPositive", "marksNegative", "isPublic", "createdByUid", "createdAt"]
+    },
+    "PublicRegistration": {
+      "title": "PublicRegistration",
+      "description": "Write-once candidate registration submitted via shared exam link",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "phone": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 20
+        },
+        "targetClass": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "collegeName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "rollNo": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "examId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "examTitle": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "submittedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "name", "phone", "targetClass", "collegeName", "examId", "submittedAt"]
+    },
+    "ExamAttempt": {
+      "title": "ExamAttempt",
+      "description": "Write-once submitted CBT exam attempt and score summary",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "examId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "examTitle": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "examCode": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "studentId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "studentName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "studentRollNo": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "studentPhone": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "studentCollege": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "totalScore": {
+          "type": "number"
+        },
+        "maxScore": {
+          "type": "number"
+        },
+        "percentage": {
+          "type": "number"
+        },
+        "accuracy": {
+          "type": "number"
+        },
+        "correctCount": {
+          "type": "integer"
+        },
+        "incorrectCount": {
+          "type": "integer"
+        },
+        "unattemptedCount": {
+          "type": "integer"
+        },
+        "timeTakenMinutes": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Evaluated", "Submitted"]
+        },
+        "submittedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "examId", "examTitle", "studentName", "totalScore", "maxScore", "correctCount", "incorrectCount", "unattemptedCount", "status", "submittedAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": {
+        "$ref": "#/entities/AdminUser"
+      },
+      "description": "Authorized admin accounts"
+    },
+    "/folders/{folderId}": {
+      "schema": {
+        "$ref": "#/entities/ExamFolder"
+      },
+      "description": "Exam category folders created by faculty"
+    },
+    "/exams/{examId}": {
+      "schema": {
+        "$ref": "#/entities/ExamPaper"
+      },
+      "description": "Published and draft CBT exam papers"
+    },
+    "/exams/{examId}/questions/{questionId}": {
+      "schema": {
+        "$ref": "#/entities/ExamQuestion"
+      },
+      "description": "Individual question items and compressed image diagrams scoped to an exam"
+    },
+    "/public_registrations/{regId}": {
+      "schema": {
+        "$ref": "#/entities/PublicRegistration"
+      },
+      "description": "Write-once candidate intake for shared exam links (admin read-only)"
+    },
+    "/exam_attempts/{attemptId}": {
+      "schema": {
+        "$ref": "#/entities/ExamAttempt"
+      },
+      "description": "Write-once submitted CBT exam scorecards (admin read-only)"
+    }
+  }
+}

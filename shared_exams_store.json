@@ -1,0 +1,284 @@
+[
+  {
+    "id": "exam-1414",
+    "code": "GYAN-1414",
+    "title": "www",
+    "targetClass": "11th",
+    "durationMinutes": 60,
+    "totalMarks": 20,
+    "positiveMarks": 4,
+    "negativeMarks": -1,
+    "questions": [
+      {
+        "id": "q-1",
+        "code": "M11-01",
+        "subject": "Mathematics",
+        "topic": "Vectors & 3D",
+        "questionText": "If a and b are unit vectors...",
+        "options": [
+          {
+            "id": "1",
+            "label": "(1)",
+            "text": "-3/2"
+          },
+          {
+            "id": "2",
+            "label": "(2)",
+            "text": "1"
+          }
+        ],
+        "correctAnswer": "(1)",
+        "type": "single_choice",
+        "difficulty": "Advanced IIT",
+        "tag": "12th",
+        "targetClass": "12th",
+        "formulaNote": "Apply King's Rule: ∫[a to b] f(x) dx = ∫[a to b] f(a+b-x) dx",
+        "marksPositive": 4,
+        "marksNegative": -1,
+        "explanation": "Using King's property, replace x by (π/2 - x). Then sin(π/2 - x) = cos(x) and cos(π/2 - x) = sin(x). Adding both integrals gives 2I = ∫ [0 to π/2] 1 dx = π/2. Therefore, I = π/4.",
+        "createdAt": "2024-10-05",
+        "chapter": "Vectors & 3D",
+        "marks": 4,
+        "negativeMarks": -1,
+        "questionType": "text"
+      },
+      {
+        "id": "q-11-trig-1",
+        "code": "MATH-11-TRIG-01",
+        "subject": "Mathematics",
+        "topic": "Trigonometric Functions & Identities",
+        "type": "single_choice",
+        "difficulty": "Moderate",
+        "tag": "11th",
+        "targetClass": "11th",
+        "year": "[2025]",
+        "questionText": "Find the exact value of the trigonometric expression: \\frac{\\cos 11^\\circ + \\sin 11^\\circ}{\\cos 11^\\circ - \\sin 11^\\circ}.",
+        "formulaNote": "\\frac{\\cos \\theta + \\sin \\theta}{\\cos \\theta - \\sin \\theta} = \\tan(45^\\circ + \\theta)",
+        "options": [
+          {
+            "id": "opt-1",
+            "label": "A",
+            "text": "\\tan 56^\\circ"
+          },
+          {
+            "id": "opt-2",
+            "label": "B",
+            "text": "\\tan 34^\\circ"
+          },
+          {
+            "id": "opt-3",
+            "label": "C",
+            "text": "\\cot 56^\\circ"
+          },
+          {
+            "id": "opt-4",
+            "label": "D",
+            "text": "1"
+          }
+        ],
+        "correctAnswer": "A",
+        "marksPositive": 4,
+        "marksNegative": -1,
+        "explanation": "Divide numerator and denominator by \\cos 11^\\circ: \\frac{1 + \\tan 11^\\circ}{1 - \\tan 11^\\circ} = \\tan(45^\\circ + 11^\\circ) = \\tan 56^\\circ.",
+        "createdAt": "2025-01-01",
+        "questionType": "text",
+        "examId": "exam-1794895006308",
+        "chapter": "Trigonometric Functions & Identities",
+        "marks": 4,
+        "negativeMarks": -1
+      },
+      {
+        "id": "q-11-pnc-2",
+        "code": "MATH-11-PNC-02",
+        "subject": "Mathematics",
+        "topic": "Permutations & Combinations",
+        "type": "single_choice",
+        "difficulty": "Moderate",
+        "tag": "11th",
+        "targetClass": "11th",
+        "year": "[2025]",
+        "questionText": "In how many ways can 5 boys and 5 girls be seated around a circular table such that no two girls sit together?",
+        "formulaNote": "Circular permutations of n items is (n-1)!. Linear gaps are filled in n! ways.",
+        "options": [
+          {
+            "id": "opt-1",
+            "label": "A",
+            "text": "2,880"
+          },
+          {
+            "id": "opt-2",
+            "label": "B",
+            "text": "14,400"
+          },
+          {
+            "id": "opt-3",
+            "label": "C",
+            "text": "720"
+          },
+          {
+            "id": "opt-4",
+            "label": "D",
+            "text": "576"
+          }
+        ],
+        "correctAnswer": "A",
+        "marksPositive": 4,
+        "marksNegative": -1,
+        "explanation": "First arrange 5 boys in a circle in (5-1)! = 4! = 24 ways. This leaves 5 distinct gaps. 5 girls can occupy these 5 gaps in 5! = 120 ways. Total arrangements = 24 × 120 = 2,880.",
+        "createdAt": "2025-01-02",
+        "questionType": "text",
+        "examId": "exam-1794895006308",
+        "chapter": "Permutations & Combinations",
+        "marks": 4,
+        "negativeMarks": -1
+      },
+      {
+        "id": "q-11-conic-3",
+        "code": "MATH-11-CONIC-03",
+        "subject": "Mathematics",
+        "topic": "Conic Sections - Parabola",
+        "type": "numerical",
+        "difficulty": "Advanced IIT",
+        "tag": "11th",
+        "targetClass": "11th",
+        "year": "[2025]",
+        "questionText": "Find the length of the focal chord of the parabola y² = 16x which makes an angle of 60° with the positive x-axis.",
+        "formulaNote": "Length of focal chord inclined at angle θ is L = 4a · cosec²(θ)",
+        "options": [],
+        "correctAnswer": "21.33",
+        "marksPositive": 4,
+        "marksNegative": 0,
+        "explanation": "For y² = 16x, 4a = 16 => a = 4. Length of focal chord inclined at angle θ is L = 4a · cosec²(θ) = 16 · cosec²(60°) = 16 · (2/√3)² = 16 · 4/3 = 64/3 ≈ 21.33.",
+        "createdAt": "2025-01-03",
+        "questionType": "text",
+        "examId": "exam-1794895006308",
+        "chapter": "Conic Sections - Parabola",
+        "marks": 4,
+        "negativeMarks": 0
+      },
+      {
+        "id": "q-11-quad-4",
+        "code": "MATH-11-QUAD-04",
+        "subject": "Mathematics",
+        "topic": "Quadratic Equations & Complex Numbers",
+        "type": "single_choice",
+        "difficulty": "Moderate",
+        "tag": "11th",
+        "targetClass": "11th",
+        "year": "[2025]",
+        "questionText": "If the roots of the quadratic equation x² - px + q = 0 are \\tan 15^\\circ and \\tan 30^\\circ, then find the value of 2 + q - p.",
+        "formulaNote": "\\tan(A + B) = \\frac{\\tan A + \\tan B}{1 - \\tan A \\tan B}",
+        "options": [
+          {
+            "id": "opt-1",
+            "label": "A",
+            "text": "3"
+          },
+          {
+            "id": "opt-2",
+            "label": "B",
+            "text": "2"
+          },
+          {
+            "id": "opt-3",
+            "label": "C",
+            "text": "1"
+          },
+          {
+            "id": "opt-4",
+            "label": "D",
+            "text": "0"
+          }
+        ],
+        "correctAnswer": "A",
+        "marksPositive": 4,
+        "marksNegative": -1,
+        "explanation": "Sum of roots p = \\tan 15^\\circ + \\tan 30^\\circ. Product of roots q = \\tan 15^\\circ \\tan 30^\\circ. Since \\tan(15^\\circ + 30^\\circ) = \\tan 45^\\circ = 1 => \\frac{p}{1 - q} = 1 => p = 1 - q => p + q = 1, wait: p = 1 - q => 1 - p - q = 0 => 2 + q - p: p = 1 - q => q - p = 2q - 1. Here \\tan 45^\\circ = \\frac{p}{1 - q} = 1 => p = 1 - q => 1 + q - p = 2 => 2 + q - p = 3.",
+        "createdAt": "2025-01-04",
+        "questionType": "text",
+        "examId": "exam-1794895006308",
+        "chapter": "Quadratic Equations & Complex Numbers",
+        "marks": 4,
+        "negativeMarks": -1
+      },
+      {
+        "id": "q-11-seq-5",
+        "code": "MATH-11-SEQ-05",
+        "subject": "Mathematics",
+        "topic": "Sequence & Series",
+        "type": "single_choice",
+        "difficulty": "Moderate",
+        "tag": "11th",
+        "targetClass": "11th",
+        "year": "[2025]",
+        "questionText": "Find the sum to infinity of the arithmetic-geometric progression: S = 1 + \\frac{2}{3} + \\frac{3}{3^2} + \\frac{4}{3^3} + \\dots",
+        "formulaNote": "Multiply series by common ratio r = 1/3 and subtract: (1 - r)S = a + \\frac{d r}{1 - r}",
+        "options": [
+          {
+            "id": "opt-1",
+            "label": "A",
+            "text": "9 / 4"
+          },
+          {
+            "id": "opt-2",
+            "label": "B",
+            "text": "3 / 2"
+          },
+          {
+            "id": "opt-3",
+            "label": "C",
+            "text": "4 / 3"
+          },
+          {
+            "id": "opt-4",
+            "label": "D",
+            "text": "2"
+          }
+        ],
+        "correctAnswer": "A",
+        "marksPositive": 4,
+        "marksNegative": -1,
+        "explanation": "Let S = 1 + 2/3 + 3/9 + 4/27 + ... Then (1/3)S = 1/3 + 2/9 + 3/27 + ... Subtracting: (2/3)S = 1 + 1/3 + 1/9 + 1/27 + ... = 1 / (1 - 1/3) = 3/2. Therefore S = (3/2) * (3/2) = 9/4.",
+        "createdAt": "2025-01-05",
+        "questionType": "text",
+        "examId": "exam-1794895006308",
+        "chapter": "Sequence & Series",
+        "marks": 4,
+        "negativeMarks": -1
+      }
+    ],
+    "folderId": "folder-1",
+    "folderName": "Class 11th Mathematics Assessments",
+    "batchIds": [
+      "batch-1"
+    ],
+    "examCategory": "JEE",
+    "sections": [
+      {
+        "id": "sec-1",
+        "name": "Mathematics Section (Class 11th)",
+        "subject": "Mathematics",
+        "questionIds": [
+          "q-11-trig-1",
+          "q-11-pnc-2",
+          "q-11-conic-3",
+          "q-11-quad-4",
+          "q-11-seq-5"
+        ],
+        "instructions": "+4 for correct response, -1 for wrong response."
+      }
+    ],
+    "startTime": "2026-11-05T10:29",
+    "endTime": "2026-12-31T23:59",
+    "status": "Live",
+    "isPublic": true,
+    "publicAccessUrl": "https://ais-pre-f7jpkmgt4fqk7n2ogmc4x2-740969633609.asia-southeast1.run.app/?cbt=GYAN-1414&cls=11th&cat=JEE&title=www&dur=60&q=q-11-trig-1,q-11-pnc-2,q-11-conic-3,q-11-quad-4,q-11-seq-5",
+    "instructions": [
+      "This examination contains 5 questions strictly from Class 11th Mathematics.",
+      "+4 marks for correct response, -1 mark for wrong response.",
+      "Attempt all questions carefully within 60 minutes."
+    ],
+    "createdAt": "2026-11-05",
+    "passPercentage": 35
+  }
+]
