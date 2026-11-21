@@ -12,6 +12,7 @@ export const LoginView: React.FC = () => {
     setActiveStudentTab,
     showToast,
     loginAdmin,
+    signInAdminWithGoogle,
     settings
   } = usePortal();
 
@@ -20,6 +21,20 @@ export const LoginView: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const handleGoogleAdminSignIn = async () => {
+    setErrorMsg('');
+    setGoogleLoading(true);
+    try {
+      const res = await signInAdminWithGoogle();
+      if (!res.success && res.error) {
+        setErrorMsg(res.error);
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const handleSignIn = (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,6 +173,25 @@ export const LoginView: React.FC = () => {
               <div>
                 <p className="font-semibold text-red-800">Authentication Failed</p>
                 <p className="mt-0.5 text-[11px] text-red-600">{errorMsg}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Auto Cloud Sync Google Sign-In on Admin Tab */}
+          {roleTab === 'admin' && (
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={handleGoogleAdminSignIn}
+                disabled={googleLoading}
+                className="w-full py-2.5 px-4 bg-white border-2 border-[#002FA7] hover:bg-blue-50 text-[#002FA7] font-bold text-xs rounded cursor-pointer transition shadow-2xs flex items-center justify-center space-x-2 disabled:opacity-60"
+              >
+                <span>{googleLoading ? 'Connecting Cloud Sync...' : 'Sign in with Google (Auto Cloud Sync)'}</span>
+              </button>
+              <div className="relative flex items-center">
+                <div className="flex-grow border-t border-gray-200" />
+                <span className="shrink mx-3 text-[10px] font-mono uppercase text-gray-400">or master password</span>
+                <div className="flex-grow border-t border-gray-200" />
               </div>
             </div>
           )}

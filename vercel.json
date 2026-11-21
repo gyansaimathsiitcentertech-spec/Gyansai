@@ -2,11 +2,15 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
+      "source": "/__/auth/(.*)",
+      "destination": "https://gen-lang-client-0684384776.firebaseapp.com/__/auth/$1"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|__/auth/).*)",
       "destination": "/index.html"
     }
   ],

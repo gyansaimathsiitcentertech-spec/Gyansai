@@ -9,6 +9,7 @@ import {
   query,
   where,
   limit,
+  onSnapshot,
   serverTimestamp,
   Timestamp
 } from 'firebase/firestore';
@@ -21,7 +22,22 @@ import {
   FIREBASE_PROJECT_ID,
   FIRESTORE_DATABASE_ID
 } from '../firebase';
-import { Exam, ExamAttempt, ExamFolder, Question, User } from '../types';
+import {
+  AttendanceRecord,
+  Batch,
+  Course,
+  Exam,
+  ExamAttempt,
+  ExamFolder,
+  InstituteSettings,
+  NotificationItem,
+  PaymentTransaction,
+  Question,
+  StudyMaterial,
+  Teacher,
+  TestSeries,
+  User
+} from '../types';
 import {
   getMeaningfulQuestionText,
   getQuestionImageSrc,
@@ -744,21 +760,418 @@ export async function submitAttemptToFirestore(attempt: ExamAttempt): Promise<vo
   }
 }
 
+export type PortalCatalogId =
+  | 'courses'
+  | 'test_series'
+  | 'batches'
+  | 'study_materials'
+  | 'notifications'
+  | 'teachers_public';
+
+export type AdminWorkspaceId =
+  | 'students'
+  | 'teachers_private'
+  | 'attendance'
+  | 'payments'
+  | 'question_bank'
+  | 'admin_security';
+
+function stripUndefinedDeep(value: unknown, depth = 0): any {
+  if (depth > 8 || value === undefined) return undefined;
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    return value
+      .map(item => stripUndefinedDeep(item, depth + 1))
+      .filter(item => item !== undefined);
+  }
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (v === undefined) continue;
+    const cleaned = stripUndefinedDeep(v, depth + 1);
+    if (cleaned !== undefined) {
+      out[k] = cleaned;
+    }
+  }
+  return out;
+}
+
+async function fitOptionalImageField(raw: string | undefined, maxChars = 420000): Promise<string> {
+  if (!raw) return '';
+  if (!raw.startsWith('data:image/')) return clampString(raw, maxChars);
+  if (raw.length <= maxChars) return raw;
+  const fitted = await fitDataUrlForFirestore(raw, maxChars);
+  return fitted || '';
+}
+
+export async function syncPortalSettingsToFirestore(settings: InstituteSettings): Promise<void> {
+  if (!isVerifiedAdminSignedIn()) return;
+  const uid = auth.currentUser!.uid;
+  const path = 'portal_settings/main';
+
+  try {
+    const [logoUrl, heroImageUrl, faviconUrl, upiQrCodeUrl] = await Promise.all([
+      fitOptionalImageField(settings.logoUrl, 420000),
+      fitOptionalImageField(settings.heroImageUrl, 420000),
+      fitOptionalImageField(settings.faviconUrl, 420000),
+      fitOptionalImageField(settings.upiQrCodeUrl, 420000)
+    ]);
+
+    const mutableFields: Record<string, any> = {
+      instituteName: clampString(settings.instituteName, 160) || 'Gyansai Maths IIT Center',
+      tagline: clampString(settings.tagline, 240),
+      storageTag: clampString(settings.storageTag, 80),
+      directorName: clampString(settings.directorName, 120),
+      directorDesignation: clampString(settings.directorDesignation, 160),
+      email: clampString(settings.email, 160),
+      phone: clampString(settings.phone, 40),
+      whatsapp: clampString(settings.whatsapp, 40),
+      address: clampString(settings.address, 500),
+      city: clampString(settings.city, 80),
+      state: clampString(settings.state, 80),
+      pinCode: clampString(settings.pinCode, 20),
+      website: clampString(settings.website, 300),
+      academicYear: clampString(settings.academicYear, 40),
+      defaultNegativeMarking: Number.isFinite(Number(settings.defaultNegativeMarking))
+        ? Number(settings.defaultNegativeMarking)
+        : -1,
+      defaultPositiveMarking: Number.isFinite(Number(settings.defaultPositiveMarking))
+        ? Number(settings.defaultPositiveMarking)
+        : 4,
+      defaultExamDurationMinutes: safeInt(settings.defaultExamDurationMinutes, 60, 1, 600),
+      allowResultReviewImmediately: Boolean(settings.allowResultReviewImmediately),
+      watermarkRollNumber: Boolean(settings.watermarkRollNumber),
+      enforceFullScreenInExam: Boolean(settings.enforceFullScreenInExam),
+      logoUrl,
+      logoSizeW: clampString(settings.logoSizeW, 20),
+      logoSizeH: clampString(settings.logoSizeH, 20),
+      heroImageUrl,
+      heroTitle: clampString(settings.heroTitle, 240),
+      heroSubtitle: clampString(settings.heroSubtitle, 600),
+      primaryCTA: clampString(settings.primaryCTA, 80),
+      secondaryCTA: clampString(settings.secondaryCTA, 80),
+      faviconUrl,
+      primaryColor: clampString(settings.primaryColor, 32) || '#002FA7',
+      upiId: clampString(settings.upiId, 120),
+      bankName: clampString(settings.bankName, 160),
+      accountNo: clampString(settings.accountNo, 60),
+      ifsc: clampString(settings.ifsc, 40),
+      upiQrCodeUrl,
+      youtube: clampString(settings.youtube, 300),
+      instagram: clampString(settings.instagram, 300),
+      twitter: clampString(settings.twitter, 300),
+      facebook: clampString(settings.facebook, 300),
+      metaTitle: clampString(settings.metaTitle, 200),
+      metaDescription: clampString(settings.metaDescription, 500),
+      googleAnalyticsId: clampString(settings.googleAnalyticsId, 60),
+      updatedAt: serverTimestamp()
+    };
+
+    const ref = doc(db, 'portal_settings', 'main');
+    const existingSnap = await getDoc(ref).catch(() => null);
+    if (existingSnap && existingSnap.exists()) {
+      const existingData = existingSnap.data();
+      if (existingData?.createdByUid === uid) {
+        await updateDoc(ref, mutableFields);
+      } else {
+        await deleteDoc(ref).catch(() => {});
+        await setDoc(ref, {
+          id: 'main',
+          ...mutableFields,
+          createdByUid: uid,
+          createdAt: serverTimestamp()
+        });
+      }
+    } else {
+      await setDoc(ref, {
+        id: 'main',
+        ...mutableFields,
+        createdByUid: uid,
+        createdAt: serverTimestamp()
+      });
+    }
+
+    // Store adminPassword strictly in admin-only workspace (never in public settings)
+    if (settings.adminPassword) {
+      await syncAdminWorkspaceToFirestore('admin_security', {
+        securityConfig: { adminPassword: clampString(settings.adminPassword, 120) }
+      }).catch(() => {});
+    }
+  } catch (error) {
+    if (isFormattedFirestoreError(error)) throw error;
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function syncPortalCatalogToFirestore(
+  catalogId: PortalCatalogId,
+  rawItems: any[]
+): Promise<void> {
+  if (!isVerifiedAdminSignedIn()) return;
+  const uid = auth.currentUser!.uid;
+  const path = `portal_catalog/${catalogId}`;
+
+  try {
+    let items = Array.isArray(rawItems) ? rawItems.slice(0, 100) : [];
+
+    // Strip private PII from public faculty catalog and compress any oversized course thumbnails
+    if (catalogId === 'teachers_public') {
+      items = items.map((t: Teacher) => ({
+        id: t.id,
+        name: t.name,
+        designation: t.designation || '',
+        subject: t.subject || '',
+        assignedBatchIds: Array.isArray(t.assignedBatchIds) ? t.assignedBatchIds : [],
+        qualification: t.qualification || '',
+        status: t.status || 'Active'
+      }));
+    } else if (catalogId === 'courses') {
+      items = await Promise.all(
+        items.map(async (c: Course) => {
+          const thumb = await fitOptionalImageField(c.thumbnailUrl, 120000);
+          return {
+            ...c,
+            ...(thumb ? { thumbnailUrl: thumb } : {})
+          };
+        })
+      );
+    }
+
+    const cleanItems = stripUndefinedDeep(items) as Record<string, any>[];
+    const ref = doc(db, 'portal_catalog', catalogId);
+    const existingSnap = await getDoc(ref).catch(() => null);
+
+    if (existingSnap && existingSnap.exists()) {
+      const existingData = existingSnap.data();
+      if (existingData?.createdByUid === uid) {
+        await updateDoc(ref, {
+          isPublic: true,
+          items: cleanItems,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        await deleteDoc(ref).catch(() => {});
+        await setDoc(ref, {
+          id: catalogId,
+          isPublic: true,
+          items: cleanItems,
+          createdByUid: uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
+    } else {
+      await setDoc(ref, {
+        id: catalogId,
+        isPublic: true,
+        items: cleanItems,
+        createdByUid: uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    }
+  } catch (error) {
+    if (isFormattedFirestoreError(error)) throw error;
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function syncAdminWorkspaceToFirestore(
+  docId: AdminWorkspaceId,
+  payload: { items?: any[]; securityConfig?: Record<string, any> }
+): Promise<void> {
+  if (!isVerifiedAdminSignedIn()) return;
+  const uid = auth.currentUser!.uid;
+  const path = `admin_workspace/${docId}`;
+
+  try {
+    const mutable: Record<string, any> = {
+      updatedAt: serverTimestamp()
+    };
+    if (payload.items !== undefined) {
+      const bounded = Array.isArray(payload.items) ? payload.items.slice(0, 200) : [];
+      // For question_bank, avoid blowing past 1MB doc limit by trimming inline base64 images > 40KB
+      // (full exam question images are already stored individually under exams/{examId}/questions/{qId})
+      const processed =
+        docId === 'question_bank'
+          ? bounded.map((q: Question) => {
+              const copy: any = { ...q };
+              if (typeof copy.questionImageUrl === 'string' && copy.questionImageUrl.startsWith('data:') && copy.questionImageUrl.length > 35000) {
+                delete copy.questionImageUrl;
+              }
+              if (typeof copy.imageUrl === 'string' && copy.imageUrl.startsWith('data:') && copy.imageUrl.length > 35000) {
+                delete copy.imageUrl;
+              }
+              return copy;
+            })
+          : bounded;
+      mutable.items = stripUndefinedDeep(processed) || [];
+    }
+    if (payload.securityConfig !== undefined) {
+      mutable.securityConfig = stripUndefinedDeep(payload.securityConfig) || {};
+    }
+
+    const ref = doc(db, 'admin_workspace', docId);
+    const existingSnap = await getDoc(ref).catch(() => null);
+    if (existingSnap && existingSnap.exists()) {
+      const existingData = existingSnap.data();
+      if (existingData?.createdByUid === uid) {
+        await updateDoc(ref, mutable);
+      } else {
+        await deleteDoc(ref).catch(() => {});
+        await setDoc(ref, {
+          id: docId,
+          ...mutable,
+          createdByUid: uid,
+          createdAt: serverTimestamp()
+        });
+      }
+    } else {
+      await setDoc(ref, {
+        id: docId,
+        ...mutable,
+        createdByUid: uid,
+        createdAt: serverTimestamp()
+      });
+    }
+  } catch (error) {
+    if (isFormattedFirestoreError(error)) throw error;
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteAttemptFromFirestore(attemptId: string): Promise<void> {
+  if (!isVerifiedAdminSignedIn()) return;
+  const safeId = sanitizeFirestoreId(attemptId, 'att');
+  const path = `exam_attempts/${safeId}`;
+  try {
+    await deleteDoc(doc(db, 'exam_attempts', safeId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export interface PublicPortalSnapshotHandlers {
+  onSettings: (settingsPatch: Partial<InstituteSettings>) => void;
+  onCatalog: (catalogId: PortalCatalogId, items: any[]) => void;
+  onPublicExamsChange?: (exams: Exam[]) => void;
+}
+
+/**
+ * Subscribes in real time to public portal settings, public catalog collections
+ * (courses, test series, batches, study materials, notifications, public faculty),
+ * and public exams so any Admin edit reflects immediately across all browsers & devices.
+ */
+export function subscribePublicPortalChanges(handlers: PublicPortalSnapshotHandlers): () => void {
+  const unsubs: Array<() => void> = [];
+
+  try {
+    unsubs.push(
+      onSnapshot(
+        doc(db, 'portal_settings', 'main'),
+        snap => {
+          if (!snap.exists()) return;
+          const data = snap.data();
+          const {
+            id: _id,
+            createdByUid: _uid,
+            createdAt: _cAt,
+            updatedAt: _uAt,
+            ...settingsPatch
+          } = data as Record<string, any>;
+          handlers.onSettings(settingsPatch as Partial<InstituteSettings>);
+        },
+        err => {
+          console.warn('portal_settings live listener warning:', err?.message || err);
+        }
+      )
+    );
+  } catch {
+    // ignore listener setup errors
+  }
+
+  try {
+    const catalogQuery = query(collection(db, 'portal_catalog'), where('isPublic', '==', true));
+    unsubs.push(
+      onSnapshot(
+        catalogQuery,
+        snap => {
+          snap.docs.forEach(d => {
+            const data = d.data();
+            const id = (data?.id || d.id) as PortalCatalogId;
+            if (Array.isArray(data?.items)) {
+              handlers.onCatalog(id, data.items);
+            }
+          });
+        },
+        err => {
+          console.warn('portal_catalog live listener warning:', err?.message || err);
+        }
+      )
+    );
+  } catch {
+    // ignore listener setup errors
+  }
+
+  if (handlers.onPublicExamsChange) {
+    try {
+      const publicExamsQuery = query(collection(db, 'exams'), where('isPublic', '==', true));
+      unsubs.push(
+        onSnapshot(
+          publicExamsQuery,
+          snap => {
+            const mapped = snap.docs.map(d => docToExam(d.data(), []));
+            handlers.onPublicExamsChange?.(mapped);
+          },
+          err => {
+            console.warn('public exams live listener warning:', err?.message || err);
+          }
+        )
+      );
+    } catch {
+      // ignore listener setup errors
+    }
+  }
+
+  return () => {
+    unsubs.forEach(fn => {
+      try {
+        fn();
+      } catch {
+        // ignore
+      }
+    });
+  };
+}
+
 export async function fetchAdminCloudState(): Promise<{
   folders: ExamFolder[];
   exams: Exam[];
   questions: Question[];
   registrations: User[];
   attempts: ExamAttempt[];
+  settings?: Partial<InstituteSettings>;
+  catalog: Partial<Record<PortalCatalogId, any[]>>;
+  workspace: Partial<Record<AdminWorkspaceId, { items?: any[]; securityConfig?: Record<string, any> }>>;
 } | null> {
   if (!isVerifiedAdminSignedIn()) return null;
 
   try {
-    const [foldersSnap, examsSnap, regsSnap, attemptsSnap] = await Promise.all([
+    const [
+      foldersSnap,
+      examsSnap,
+      regsSnap,
+      attemptsSnap,
+      settingsSnap,
+      catalogSnap,
+      workspaceSnap
+    ] = await Promise.all([
       getDocs(collection(db, 'folders')),
       getDocs(collection(db, 'exams')),
       getDocs(collection(db, 'public_registrations')),
-      getDocs(collection(db, 'exam_attempts'))
+      getDocs(collection(db, 'exam_attempts')),
+      getDoc(doc(db, 'portal_settings', 'main')).catch(() => null),
+      getDocs(collection(db, 'portal_catalog')).catch(() => null),
+      getDocs(collection(db, 'admin_workspace')).catch(() => null)
     ]);
 
     const folders: ExamFolder[] = foldersSnap.docs.map(d => {
@@ -851,8 +1264,47 @@ export async function fetchAdminCloudState(): Promise<{
       };
     });
 
-    return { folders, exams, questions: allQuestions, registrations, attempts };
+    let settings: Partial<InstituteSettings> | undefined;
+    if (settingsSnap && settingsSnap.exists()) {
+      const { id: _id, createdByUid: _uid, createdAt: _cAt, updatedAt: _uAt, ...rest } = settingsSnap.data() as Record<string, any>;
+      settings = rest as Partial<InstituteSettings>;
+    }
+
+    const catalog: Partial<Record<PortalCatalogId, any[]>> = {};
+    if (catalogSnap) {
+      catalogSnap.docs.forEach(d => {
+        const data = d.data();
+        const key = (data?.id || d.id) as PortalCatalogId;
+        if (Array.isArray(data?.items)) {
+          catalog[key] = data.items;
+        }
+      });
+    }
+
+    const workspace: Partial<Record<AdminWorkspaceId, { items?: any[]; securityConfig?: Record<string, any> }>> = {};
+    if (workspaceSnap) {
+      workspaceSnap.docs.forEach(d => {
+        const data = d.data();
+        const key = (data?.id || d.id) as AdminWorkspaceId;
+        workspace[key] = {
+          ...(Array.isArray(data?.items) ? { items: data.items } : {}),
+          ...(data?.securityConfig && typeof data.securityConfig === 'object'
+            ? { securityConfig: data.securityConfig }
+            : {})
+        };
+      });
+    }
+
+    if (workspace.admin_security?.securityConfig?.adminPassword) {
+      settings = {
+        ...(settings || {}),
+        adminPassword: String(workspace.admin_security.securityConfig.adminPassword)
+      };
+    }
+
+    return { folders, exams, questions: allQuestions, registrations, attempts, settings, catalog, workspace };
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, 'admin-cloud-sync');
   }
 }
+

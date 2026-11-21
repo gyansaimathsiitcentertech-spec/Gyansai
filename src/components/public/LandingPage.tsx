@@ -233,11 +233,11 @@ export const LandingPage: React.FC = () => {
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-gray-950 tracking-tight leading-[1.1]">
-              Where numbers meet destiny.
+              {settings?.heroTitle?.trim() || 'Where numbers meet destiny.'}
             </h1>
 
             <p className="text-base sm:text-lg text-gray-600 max-w-2xl leading-relaxed">
-              India's most rigorous online examination & learning platform for IIT-JEE, NEET and MHT-CET aspirants.
+              {settings?.heroSubtitle?.trim() || "India's most rigorous online examination & learning platform for IIT-JEE, NEET and MHT-CET aspirants."}
             </p>
 
             <div className="flex flex-wrap items-center gap-4 pt-2">
@@ -246,7 +246,7 @@ export const LandingPage: React.FC = () => {
                 onClick={handleStartMock}
                 className="px-7 py-3.5 bg-[#002FA7] hover:bg-blue-800 text-white font-semibold text-sm rounded flex items-center space-x-2 cursor-pointer shadow-xs transition"
               >
-                <span>Start Free Mock Test</span>
+                <span>{settings?.primaryCTA?.trim() || 'Start Free Mock Test'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
 
@@ -255,7 +255,7 @@ export const LandingPage: React.FC = () => {
                 onClick={handleExploreCourses}
                 className="px-6 py-3.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-semibold text-sm rounded cursor-pointer transition"
               >
-                Explore Courses
+                {settings?.secondaryCTA?.trim() || 'Explore Courses'}
               </button>
             </div>
 
@@ -286,8 +286,8 @@ export const LandingPage: React.FC = () => {
           <div className="lg:col-span-6 relative">
             <div className="relative rounded-lg border border-gray-200 overflow-hidden shadow-lg bg-white group hover:shadow-xl transition-all">
               <img
-                src="/assets/aistudio/image_40fcb04d.png"
-                alt="Gyansai Maths IIT Center Exam Portal"
+                src={settings?.heroImageUrl?.trim() || '/assets/aistudio/image_40fcb04d.png'}
+                alt={`${settings?.instituteName || 'Gyansai Maths IIT Center'} Exam Portal`}
                 className="w-full h-auto object-cover group-hover:scale-101 transition-transform duration-300"
               />
               <div className="absolute top-3 right-3 bg-[#002FA7]/95 backdrop-blur-xs text-white px-3 py-1 font-mono text-xs font-bold rounded-xs tracking-wider border border-blue-400/40 flex items-center space-x-1.5 shadow-sm">
@@ -445,7 +445,7 @@ export const LandingPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {courses.map((course) => (
+            {courses.filter(c => c.status !== 'Draft').map((course) => (
               <div
                 key={course.id}
                 className="border border-gray-200 rounded-sm bg-white overflow-hidden flex flex-col justify-between"
@@ -454,7 +454,7 @@ export const LandingPage: React.FC = () => {
                   {/* Thumbnail / grey box */}
                   <div className="h-44 bg-gray-100 border-b border-gray-200 relative">
                     <img
-                      src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80"
+                      src={course.thumbnailUrl || 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80'}
                       alt={course.title}
                       className="w-full h-full object-cover opacity-90"
                     />
@@ -507,7 +507,7 @@ export const LandingPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {testSeries.map((ts) => (
+            {testSeries.filter(ts => ts.status !== 'Archived').map((ts) => (
               <div
                 key={ts.id}
                 className="border border-gray-200 rounded-sm p-6 bg-white flex flex-col justify-between"
@@ -520,7 +520,7 @@ export const LandingPage: React.FC = () => {
                     {ts.title}
                   </h3>
                   <p className="text-xs text-gray-600 mb-6 leading-relaxed">
-                    {ts.description}
+                    {ts.description || ts.subtitle}
                   </p>
                 </div>
 
@@ -529,7 +529,7 @@ export const LandingPage: React.FC = () => {
                     <div>
                       <span className="text-2xl font-extrabold text-gray-950">₹{ts.price}</span>
                       <span className="text-xs text-gray-500 block font-mono mt-0.5">
-                        {ts.testCount} mock tests
+                        {ts.testCount ?? ts.testsCount ?? 0} mock tests
                       </span>
                     </div>
                     <button
@@ -580,10 +580,10 @@ export const LandingPage: React.FC = () => {
                 CONTACT
               </div>
               <div className="space-y-1.5 text-xs text-gray-700">
-                <p className="font-medium">+91 9970603939</p>
-                <p className="text-gray-600">gyansaimathiitcentertec@gmail.com</p>
-                <p className="text-blue-700 hover:underline">
-                  https://gyansaimathsiitcenter.co.in/
+                <p className="font-medium">{settings?.phone || '+91 9970603939'}</p>
+                <p className="text-gray-600">{settings?.email || 'gyansaimathsiitcentertech@gmail.com'}</p>
+                <p className="text-blue-700 hover:underline break-all">
+                  {settings?.website || 'https://gyansaimathsiitcenter.co.in/'}
                 </p>
               </div>
             </div>
@@ -621,7 +621,7 @@ export const LandingPage: React.FC = () => {
           {/* Bottom Copyright bar */}
           <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-gray-500 gap-3">
             <div>
-              © 2026 Gyansai Maths IIT Center — All rights reserved.
+              © 2026 {settings?.instituteName || 'Gyansai Maths IIT Center'} — All rights reserved.
             </div>
             <div className="font-mono text-gray-400">
               Built for India's toughest entrance exams.

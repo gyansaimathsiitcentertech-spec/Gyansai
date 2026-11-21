@@ -62,6 +62,7 @@ export const StudentExamsView: React.FC = () => {
 
   const filteredExams = useMemo(() => {
     return exams.filter(ex => {
+      if (ex.status === 'Draft') return false;
       // 1. Class filter
       const examClass = (ex.targetClass || '11th').toLowerCase();
       if (classFilter === 'my_class') {

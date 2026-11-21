@@ -1,9 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { usePortal } from '../../context/PortalContext';
 import { Save, Upload, Trash2, Image as ImageIcon, Lock, KeyRound, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 
 export const InstituteSettingsView: React.FC = () => {
-  const { settings, updateSettings, showToast } = usePortal();
+  const { settings, updateSettings, showToast, firebaseAdminEmail } = usePortal();
 
   // State matching Screenshots 477, 478, 479 initialized with settings
   const [instituteName, setInstituteName] = useState(settings.instituteName || 'Gyansai Maths IIT Center');
@@ -41,6 +41,40 @@ export const InstituteSettingsView: React.FC = () => {
   const [googleAnalyticsId, setGoogleAnalyticsId] = useState(settings.googleAnalyticsId || 'G-XXXXXXXX');
   const [adminPassword, setAdminPassword] = useState(settings.adminPassword || 'admin123');
   const [showAdminPassword, setShowAdminPassword] = useState(false);
+
+  // Keep form fields synchronized whenever settings hydrate from Cloud Firestore or another tab
+  useEffect(() => {
+    setInstituteName(settings.instituteName || 'Gyansai Maths IIT Center');
+    setTagline(settings.tagline || '');
+    setStorageTag(settings.storageTag || '');
+    setLogoUrl(settings.logoUrl || '');
+    setLogoSizeW(settings.logoSizeW || '70');
+    setLogoSizeH(settings.logoSizeH || '70');
+    setHeroImageUrl(settings.heroImageUrl || '');
+    setHeroTitle(settings.heroTitle || '');
+    setHeroSubtitle(settings.heroSubtitle || '');
+    setPrimaryCTA(settings.primaryCTA || '');
+    setSecondaryCTA(settings.secondaryCTA || '');
+    setFaviconUrl(settings.faviconUrl || '');
+    setPrimaryColor(settings.primaryColor || '#002FA7');
+    setAddress(settings.address || '');
+    setPhone(settings.phone || '');
+    setEmail(settings.email || '');
+    setWebsite(settings.website || '');
+    setUpiId(settings.upiId || '');
+    setBankName(settings.bankName || '');
+    setAccountNo(settings.accountNo || '');
+    setIfsc(settings.ifsc || '');
+    setUpiQrCodeUrl(settings.upiQrCodeUrl || '');
+    setYoutube(settings.youtube || '');
+    setInstagram(settings.instagram || '');
+    setTwitter(settings.twitter || '');
+    setFacebook(settings.facebook || '');
+    setMetaTitle(settings.metaTitle || '');
+    setMetaDescription(settings.metaDescription || '');
+    setGoogleAnalyticsId(settings.googleAnalyticsId || '');
+    if (settings.adminPassword) setAdminPassword(settings.adminPassword);
+  }, [settings]);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const heroInputRef = useRef<HTMLInputElement>(null);
@@ -135,7 +169,6 @@ export const InstituteSettingsView: React.FC = () => {
       googleAnalyticsId,
       adminPassword
     });
-    showToast('Institute settings and admin credentials saved successfully.');
   };
 
   return (
@@ -150,7 +183,12 @@ export const InstituteSettingsView: React.FC = () => {
             Institute Settings
           </h1>
           <p className="text-xs text-gray-500 mt-1">
-            All fields are editable — changes propagate to public pages and certificates in real-time.
+            All fields are editable — changes sync to public pages, student portal, and certificates in real-time.
+            {!firebaseAdminEmail && (
+              <span className="ml-1.5 text-amber-700 font-medium">
+                (Connect Google Cloud Sync in the sidebar to publish edits across all devices.)
+              </span>
+            )}
           </p>
         </div>
         <button

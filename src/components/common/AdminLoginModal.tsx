@@ -28,17 +28,14 @@ export const AdminLoginModal: React.FC = () => {
     }
 
     setIsLoading(true);
-
-    setTimeout(() => {
-      const result = loginAdmin(password.trim());
-      setIsLoading(false);
-      if (!result.success) {
-        setErrorMsg(result.error || 'Incorrect admin password.');
-      } else {
-        setPassword('');
-        setErrorMsg('');
-      }
-    }, 200);
+    const result = loginAdmin(password.trim());
+    setIsLoading(false);
+    if (!result.success) {
+      setErrorMsg(result.error || 'Incorrect admin password.');
+    } else {
+      setPassword('');
+      setErrorMsg('');
+    }
   };
 
   const handleGoogleLogin = async () => {

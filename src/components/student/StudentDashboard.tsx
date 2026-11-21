@@ -5,10 +5,8 @@ import {
   Trophy,
   Target,
   BookOpen,
-  ArrowRight,
-  CheckCircle2,
-  Clock,
-  Award
+  Bell,
+  FileText
 } from 'lucide-react';
 
 export const StudentDashboard: React.FC = () => {
@@ -16,6 +14,8 @@ export const StudentDashboard: React.FC = () => {
     currentUser,
     exams,
     attempts,
+    notifications,
+    studyMaterials,
     startExamForStudent,
     setActiveStudentTab,
     setSelectedAttemptForResult
@@ -49,9 +49,9 @@ export const StudentDashboard: React.FC = () => {
     return '11th';
   }, [currentUser]);
 
-  // Real available exams prioritized for student's class
+  // Real available exams prioritized for student's class (exclude Draft exams)
   const liveExams = useMemo(() => {
-    const active = exams.filter(e => e.status === 'Live' || e.status === 'Active' || e.isPublic);
+    const active = exams.filter(e => e.status !== 'Draft' && (e.status === 'Live' || e.status === 'Active' || e.status === 'Published' || e.isPublic));
     return [...active].sort((a, b) => {
       const aMatches = studentClass === '12th' ? (a.targetClass || '').includes('12') : (a.targetClass || '').includes('11');
       const bMatches = studentClass === '12th' ? (b.targetClass || '').includes('12') : (b.targetClass || '').includes('11');
@@ -258,6 +258,83 @@ export const StudentDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Live Announcements & Study Materials published by Admin */}
+      {(notifications.length > 0 || studyMaterials.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Announcements */}
+          <div className="lg:col-span-6 bg-white border border-gray-200 rounded-sm p-6 space-y-3 shadow-2xs">
+            <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
+              <Bell className="w-4 h-4 text-[#002FA7]" />
+              <h2 className="text-xs font-bold text-gray-900 uppercase">
+                Institute Announcements ({notifications.length})
+              </h2>
+            </div>
+            {notifications.length === 0 ? (
+              <p className="text-gray-400 font-mono py-4 text-center">No new announcements.</p>
+            ) : (
+              <div className="space-y-2.5">
+                {notifications.slice(0, 5).map(n => (
+                  <div key={n.id} className="p-3 border border-gray-100 rounded bg-slate-50/60 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-gray-900">{n.title}</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
+                          n.priority === 'Urgent' || n.priority === 'High'
+                            ? 'bg-red-50 text-red-700 border border-red-200'
+                            : 'bg-blue-50 text-[#002FA7] border border-blue-200'
+                        }`}
+                      >
+                        {n.priority}
+                      </span>
+                    </div>
+                    <p className="text-gray-600 leading-relaxed">{n.message}</p>
+                    <div className="text-[10px] font-mono text-gray-400">
+                      {n.author} &bull; {n.createdAt}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Study Materials */}
+          <div className="lg:col-span-6 bg-white border border-gray-200 rounded-sm p-6 space-y-3 shadow-2xs">
+            <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
+              <FileText className="w-4 h-4 text-[#002FA7]" />
+              <h2 className="text-xs font-bold text-gray-900 uppercase">
+                Study Materials &amp; Formula Sheets ({studyMaterials.length})
+              </h2>
+            </div>
+            {studyMaterials.length === 0 ? (
+              <p className="text-gray-400 font-mono py-4 text-center">No study materials uploaded yet.</p>
+            ) : (
+              <div className="space-y-2.5">
+                {studyMaterials.slice(0, 5).map(mat => (
+                  <div key={mat.id} className="p-3 border border-gray-100 rounded bg-slate-50/60 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-bold text-gray-900 truncate">{mat.title}</div>
+                      <div className="text-[10px] font-mono text-gray-500 mt-0.5">
+                        {mat.subject} &bull; {mat.topic} &bull; {mat.fileType}
+                      </div>
+                    </div>
+                    {mat.url && /^https?:\/\//i.test(mat.url) && (
+                      <a
+                        href={mat.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 border border-gray-300 bg-white hover:bg-gray-50 rounded text-[11px] font-semibold text-[#002FA7] shrink-0"
+                      >
+                        Open
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

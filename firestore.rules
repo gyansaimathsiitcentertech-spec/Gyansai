@@ -181,6 +181,100 @@ service cloud.firestore {
         (!('timeTakenMinutes' in data) || (data.timeTakenMinutes is int && data.timeTakenMinutes >= 0 && data.timeTakenMinutes <= 1000));
     }
 
+    function isValidPortalSettings(data) {
+      return data.keys().hasAll(['id', 'instituteName', 'createdByUid', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'id', 'instituteName', 'tagline', 'storageTag', 'directorName', 'directorDesignation',
+          'email', 'phone', 'whatsapp', 'address', 'city', 'state', 'pinCode', 'website',
+          'academicYear', 'defaultNegativeMarking', 'defaultPositiveMarking', 'defaultExamDurationMinutes',
+          'allowResultReviewImmediately', 'watermarkRollNumber', 'enforceFullScreenInExam',
+          'logoUrl', 'logoSizeW', 'logoSizeH', 'heroImageUrl', 'heroTitle', 'heroSubtitle',
+          'primaryCTA', 'secondaryCTA', 'faviconUrl', 'primaryColor',
+          'upiId', 'bankName', 'accountNo', 'ifsc', 'upiQrCodeUrl',
+          'youtube', 'instagram', 'twitter', 'facebook',
+          'metaTitle', 'metaDescription', 'googleAnalyticsId',
+          'createdByUid', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id == 'main' &&
+        data.instituteName is string && data.instituteName.size() >= 1 && data.instituteName.size() <= 160 &&
+        data.createdByUid is string && data.createdByUid == request.auth.uid && data.createdByUid.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp &&
+        (!('tagline' in data) || (data.tagline is string && data.tagline.size() <= 240)) &&
+        (!('storageTag' in data) || (data.storageTag is string && data.storageTag.size() <= 80)) &&
+        (!('directorName' in data) || (data.directorName is string && data.directorName.size() <= 120)) &&
+        (!('directorDesignation' in data) || (data.directorDesignation is string && data.directorDesignation.size() <= 160)) &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 160)) &&
+        (!('phone' in data) || (data.phone is string && data.phone.size() <= 40)) &&
+        (!('whatsapp' in data) || (data.whatsapp is string && data.whatsapp.size() <= 40)) &&
+        (!('address' in data) || (data.address is string && data.address.size() <= 500)) &&
+        (!('city' in data) || (data.city is string && data.city.size() <= 80)) &&
+        (!('state' in data) || (data.state is string && data.state.size() <= 80)) &&
+        (!('pinCode' in data) || (data.pinCode is string && data.pinCode.size() <= 20)) &&
+        (!('website' in data) || (data.website is string && data.website.size() <= 300)) &&
+        (!('academicYear' in data) || (data.academicYear is string && data.academicYear.size() <= 40)) &&
+        (!('defaultNegativeMarking' in data) || (data.defaultNegativeMarking is int || data.defaultNegativeMarking is float)) &&
+        (!('defaultPositiveMarking' in data) || (data.defaultPositiveMarking is int || data.defaultPositiveMarking is float)) &&
+        (!('defaultExamDurationMinutes' in data) || (data.defaultExamDurationMinutes is int && data.defaultExamDurationMinutes >= 1 && data.defaultExamDurationMinutes <= 600)) &&
+        (!('allowResultReviewImmediately' in data) || data.allowResultReviewImmediately is bool) &&
+        (!('watermarkRollNumber' in data) || data.watermarkRollNumber is bool) &&
+        (!('enforceFullScreenInExam' in data) || data.enforceFullScreenInExam is bool) &&
+        (!('logoUrl' in data) || (data.logoUrl is string && data.logoUrl.size() <= 450000)) &&
+        (!('logoSizeW' in data) || (data.logoSizeW is string && data.logoSizeW.size() <= 20)) &&
+        (!('logoSizeH' in data) || (data.logoSizeH is string && data.logoSizeH.size() <= 20)) &&
+        (!('heroImageUrl' in data) || (data.heroImageUrl is string && data.heroImageUrl.size() <= 450000)) &&
+        (!('heroTitle' in data) || (data.heroTitle is string && data.heroTitle.size() <= 240)) &&
+        (!('heroSubtitle' in data) || (data.heroSubtitle is string && data.heroSubtitle.size() <= 600)) &&
+        (!('primaryCTA' in data) || (data.primaryCTA is string && data.primaryCTA.size() <= 80)) &&
+        (!('secondaryCTA' in data) || (data.secondaryCTA is string && data.secondaryCTA.size() <= 80)) &&
+        (!('faviconUrl' in data) || (data.faviconUrl is string && data.faviconUrl.size() <= 450000)) &&
+        (!('primaryColor' in data) || (data.primaryColor is string && data.primaryColor.size() <= 32)) &&
+        (!('upiId' in data) || (data.upiId is string && data.upiId.size() <= 120)) &&
+        (!('bankName' in data) || (data.bankName is string && data.bankName.size() <= 160)) &&
+        (!('accountNo' in data) || (data.accountNo is string && data.accountNo.size() <= 60)) &&
+        (!('ifsc' in data) || (data.ifsc is string && data.ifsc.size() <= 40)) &&
+        (!('upiQrCodeUrl' in data) || (data.upiQrCodeUrl is string && data.upiQrCodeUrl.size() <= 450000)) &&
+        (!('youtube' in data) || (data.youtube is string && data.youtube.size() <= 300)) &&
+        (!('instagram' in data) || (data.instagram is string && data.instagram.size() <= 300)) &&
+        (!('twitter' in data) || (data.twitter is string && data.twitter.size() <= 300)) &&
+        (!('facebook' in data) || (data.facebook is string && data.facebook.size() <= 300)) &&
+        (!('metaTitle' in data) || (data.metaTitle is string && data.metaTitle.size() <= 200)) &&
+        (!('metaDescription' in data) || (data.metaDescription is string && data.metaDescription.size() <= 500)) &&
+        (!('googleAnalyticsId' in data) || (data.googleAnalyticsId is string && data.googleAnalyticsId.size() <= 60));
+    }
+
+    function isValidPortalCatalog(data, catalogId) {
+      return data.keys().hasAll(['id', 'isPublic', 'items', 'createdByUid', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'isPublic', 'items', 'createdByUid', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.id == catalogId &&
+        data.id in ['courses', 'test_series', 'batches', 'study_materials', 'notifications', 'teachers_public'] &&
+        data.isPublic is bool &&
+        data.items is list &&
+        data.items.size() <= 100 &&
+        (data.items.size() == 0 || data.items[0] is map) &&
+        data.createdByUid is string && data.createdByUid == request.auth.uid && data.createdByUid.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdminWorkspace(data, docId) {
+      return data.keys().hasAll(['id', 'createdByUid', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'items', 'securityConfig', 'createdByUid', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.id == docId &&
+        data.id in ['students', 'teachers_private', 'attendance', 'payments', 'question_bank', 'admin_security'] &&
+        data.createdByUid is string && data.createdByUid == request.auth.uid && data.createdByUid.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp &&
+        (!('items' in data) || (
+          data.items is list &&
+          data.items.size() <= 200 &&
+          (data.items.size() == 0 || data.items[0] is map)
+        )) &&
+        (!('securityConfig' in data) || data.securityConfig is map);
+    }
+
     // 1. Admins Allowlist
     match /admins/{adminId} {
       allow get: if isValidId(adminId) && (isAdmin() || (isSignedIn() && request.auth.uid == adminId));
@@ -278,6 +372,71 @@ service cloud.firestore {
         incoming().id == attemptId &&
         incoming().submittedAt == request.time &&
         exists(/databases/$(database)/documents/exams/$(incoming().examId));
+    }
+
+    // 7. Public Portal Settings (Single 'main' doc; Public get only, Admin write only, zero passwords)
+    match /portal_settings/{settingId} {
+      allow get: if isValidId(settingId) && settingId == 'main';
+      allow list: if isAdmin();
+      allow create: if isAdmin() && isValidId(settingId) && settingId == 'main' &&
+        isValidPortalSettings(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(settingId) && settingId == 'main' &&
+        isValidPortalSettings(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdByUid == existing().createdByUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'instituteName', 'tagline', 'storageTag', 'directorName', 'directorDesignation',
+          'email', 'phone', 'whatsapp', 'address', 'city', 'state', 'pinCode', 'website',
+          'academicYear', 'defaultNegativeMarking', 'defaultPositiveMarking', 'defaultExamDurationMinutes',
+          'allowResultReviewImmediately', 'watermarkRollNumber', 'enforceFullScreenInExam',
+          'logoUrl', 'logoSizeW', 'logoSizeH', 'heroImageUrl', 'heroTitle', 'heroSubtitle',
+          'primaryCTA', 'secondaryCTA', 'faviconUrl', 'primaryColor',
+          'upiId', 'bankName', 'accountNo', 'ifsc', 'upiQrCodeUrl',
+          'youtube', 'instagram', 'twitter', 'facebook',
+          'metaTitle', 'metaDescription', 'googleAnalyticsId',
+          'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(settingId);
+    }
+
+    // 8. Public Portal Catalog (Courses, Test Series, Batches, Study Materials, Notifications, Public Faculty)
+    match /portal_catalog/{catalogId} {
+      allow get: if isValidId(catalogId) && (isAdmin() || existing().isPublic == true);
+      allow list: if isAdmin() || resource.data.isPublic == true;
+      allow create: if isAdmin() && isValidId(catalogId) &&
+        isValidPortalCatalog(incoming(), catalogId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(catalogId) &&
+        isValidPortalCatalog(incoming(), catalogId) &&
+        incoming().id == existing().id &&
+        incoming().createdByUid == existing().createdByUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['isPublic', 'items', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(catalogId);
+    }
+
+    // 9. Strictly Admin-Only Private Operational Workspace (Students PII, Payments, Attendance, Admin Security)
+    match /admin_workspace/{docId} {
+      allow get: if isValidId(docId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isAdmin() && isValidId(docId) &&
+        isValidAdminWorkspace(incoming(), docId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(docId) &&
+        isValidAdminWorkspace(incoming(), docId) &&
+        incoming().id == existing().id &&
+        incoming().createdByUid == existing().createdByUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['items', 'securityConfig', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(docId);
     }
   }
 }

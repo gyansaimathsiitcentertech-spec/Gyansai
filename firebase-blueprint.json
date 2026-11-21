@@ -412,6 +412,263 @@
         }
       },
       "required": ["id", "examId", "examTitle", "studentName", "totalScore", "maxScore", "correctCount", "incorrectCount", "unattemptedCount", "status", "submittedAt"]
+    },
+    "PortalSettings": {
+      "title": "PortalSettings",
+      "description": "Publicly readable institute branding, hero, contact, UPI checkout, and SEO settings managed exclusively by verified admins (never stores passwords)",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "instituteName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "tagline": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "storageTag": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "directorName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "directorDesignation": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "whatsapp": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "address": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "city": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "state": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "pinCode": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "website": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "academicYear": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "defaultNegativeMarking": {
+          "type": "number"
+        },
+        "defaultPositiveMarking": {
+          "type": "number"
+        },
+        "defaultExamDurationMinutes": {
+          "type": "integer"
+        },
+        "allowResultReviewImmediately": {
+          "type": "boolean"
+        },
+        "watermarkRollNumber": {
+          "type": "boolean"
+        },
+        "enforceFullScreenInExam": {
+          "type": "boolean"
+        },
+        "logoUrl": {
+          "type": "string",
+          "maxLength": 450000
+        },
+        "logoSizeW": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "logoSizeH": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "heroImageUrl": {
+          "type": "string",
+          "maxLength": 450000
+        },
+        "heroTitle": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "heroSubtitle": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "primaryCTA": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "secondaryCTA": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "faviconUrl": {
+          "type": "string",
+          "maxLength": 450000
+        },
+        "primaryColor": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "upiId": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "bankName": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "accountNo": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "ifsc": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "upiQrCodeUrl": {
+          "type": "string",
+          "maxLength": 450000
+        },
+        "youtube": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "instagram": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "twitter": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "facebook": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "metaTitle": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "metaDescription": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "googleAnalyticsId": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "createdByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "instituteName", "createdByUid", "createdAt", "updatedAt"]
+    },
+    "PortalCatalog": {
+      "title": "PortalCatalog",
+      "description": "Publicly readable portal catalog collection document (courses, test_series, batches, study_materials, notifications, teachers_public) containing bounded native item maps managed by verified admins",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "enum": ["courses", "test_series", "batches", "study_materials", "notifications", "teachers_public"]
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "description": "Bounded list of up to 100 native item maps (no PII)"
+        },
+        "createdByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "isPublic", "items", "createdByUid", "createdAt", "updatedAt"]
+    },
+    "AdminWorkspace": {
+      "title": "AdminWorkspace",
+      "description": "Strictly admin-only private operational documents (students, teachers_private, attendance, payments, question_bank, admin_security)",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "enum": ["students", "teachers_private", "attendance", "payments", "question_bank", "admin_security"]
+        },
+        "items": {
+          "type": "array",
+          "description": "Bounded list of up to 200 operational record maps"
+        },
+        "securityConfig": {
+          "type": "object",
+          "description": "Admin-only security settings map"
+        },
+        "createdByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "createdByUid", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -450,6 +707,25 @@
         "$ref": "#/entities/ExamAttempt"
       },
       "description": "Write-once submitted CBT exam scorecards (admin read-only)"
+    },
+    "/portal_settings/{settingId}": {
+      "schema": {
+        "$ref": "#/entities/PortalSettings"
+      },
+      "description": "Publicly readable institute branding, hero, contact, and checkout config (admin-only write)"
+    },
+    "/portal_catalog/{catalogId}": {
+      "schema": {
+        "$ref": "#/entities/PortalCatalog"
+      },
+      "description": "Publicly readable catalog collections (courses, test series, batches, study materials, notifications, public faculty profiles) written only by verified admins"
+    },
+    "/admin_workspace/{docId}": {
+      "schema": {
+        "$ref": "#/entities/AdminWorkspace"
+      },
+      "description": "Strictly admin-only operational records (students, private faculty contacts, attendance, payments, question bank, admin security)"
     }
   }
 }
+

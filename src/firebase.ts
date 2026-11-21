@@ -1,5 +1,10 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import {
+  getAuth,
+  GoogleAuthProvider,
+  setPersistence,
+  browserLocalPersistence
+} from 'firebase/auth';
 import {
   getFirestore,
   initializeFirestore,
@@ -9,28 +14,47 @@ import {
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+const env = (import.meta as any).env || {};
+const readEnv = (key: string): string => {
+  const val = env?.[key];
+  return typeof val === 'string' ? val.trim() : '';
+};
+
+const resolvedFirebaseConfig = {
+  ...firebaseConfig,
+  ...(readEnv('VITE_FIREBASE_PROJECT_ID') ? { projectId: readEnv('VITE_FIREBASE_PROJECT_ID') } : {}),
+  ...(readEnv('VITE_FIREBASE_APP_ID') ? { appId: readEnv('VITE_FIREBASE_APP_ID') } : {}),
+  ...(readEnv('VITE_FIREBASE_API_KEY') ? { apiKey: readEnv('VITE_FIREBASE_API_KEY') } : {}),
+  ...(readEnv('VITE_FIREBASE_AUTH_DOMAIN') ? { authDomain: readEnv('VITE_FIREBASE_AUTH_DOMAIN') } : {}),
+  ...(readEnv('VITE_FIREBASE_DATABASE_ID') ? { firestoreDatabaseId: readEnv('VITE_FIREBASE_DATABASE_ID') } : {}),
+  ...(readEnv('VITE_FIREBASE_STORAGE_BUCKET') ? { storageBucket: readEnv('VITE_FIREBASE_STORAGE_BUCKET') } : {}),
+  ...(readEnv('VITE_FIREBASE_MESSAGING_SENDER_ID') ? { messagingSenderId: readEnv('VITE_FIREBASE_MESSAGING_SENDER_ID') } : {})
+};
+
+const app = getApps().length > 0 ? getApp() : initializeApp(resolvedFirebaseConfig);
 
 function createFirestoreInstance(): Firestore {
+  const dbId = resolvedFirebaseConfig.firestoreDatabaseId || '(default)';
   try {
     return initializeFirestore(
       app,
       { experimentalAutoDetectLongPolling: true },
-      firebaseConfig.firestoreDatabaseId
+      dbId
     );
   } catch {
-    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    return getFirestore(app, dbId);
   }
 }
 
 export const db = createFirestoreInstance();
 export const auth = getAuth(app);
+setPersistence(auth, browserLocalPersistence).catch(() => {});
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-export const FIREBASE_PROJECT_ID = firebaseConfig.projectId;
-export const FIRESTORE_DATABASE_ID = firebaseConfig.firestoreDatabaseId;
-export const ADMIN_EMAIL = 'gyansaimathsiitcentertech@gmail.com';
+export const FIREBASE_PROJECT_ID = resolvedFirebaseConfig.projectId;
+export const FIRESTORE_DATABASE_ID = resolvedFirebaseConfig.firestoreDatabaseId || '(default)';
+export const ADMIN_EMAIL = readEnv('VITE_FIREBASE_ADMIN_EMAIL') || 'gyansaimathsiitcentertech@gmail.com';
 
 export enum OperationType {
   CREATE = 'create',
