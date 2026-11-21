@@ -4,13 +4,23 @@ import {
   getDoc,
   getDocs,
   setDoc,
+  updateDoc,
   deleteDoc,
   query,
   where,
+  limit,
   serverTimestamp,
   Timestamp
 } from 'firebase/firestore';
-import { auth, db, handleFirestoreError, OperationType, ADMIN_EMAIL } from '../firebase';
+import {
+  auth,
+  db,
+  handleFirestoreError,
+  OperationType,
+  ADMIN_EMAIL,
+  FIREBASE_PROJECT_ID,
+  FIRESTORE_DATABASE_ID
+} from '../firebase';
 import { Exam, ExamAttempt, ExamFolder, Question, User } from '../types';
 import {
   getMeaningfulQuestionText,
@@ -18,6 +28,8 @@ import {
   normalizeQuestionImageUrl,
   resolveQuestionType
 } from './imageCompress';
+
+const SAFE_FIRESTORE_IMAGE_CHARS = 820000;
 
 export function sanitizeFirestoreId(raw: string, fallbackPrefix = 'doc'): string {
   const cleaned = (raw || '')
@@ -34,9 +46,153 @@ export function isVerifiedAdminSignedIn(): boolean {
   return (user.email || '').toLowerCase() === ADMIN_EMAIL.toLowerCase();
 }
 
-function clampString(val: string | undefined, max: number): string {
-  if (!val) return '';
+function clampString(val: unknown, max: number): string {
+  if (val === undefined || val === null) return '';
   return String(val).slice(0, max);
+}
+
+function safeInt(val: unknown, fallback: number, min: number, max: number): number {
+  const n = Number(val);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+function isFormattedFirestoreError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const msg = error.message || '';
+  return msg.startsWith('{') && msg.includes('"operationType"') && msg.includes('"authInfo"');
+}
+
+export interface SyncErrorClassification {
+  kind: 'quota' | 'permission' | 'auth' | 'network' | 'size' | 'unknown';
+  fatal: boolean;
+  rawMessage: string;
+  userMessage: string;
+}
+
+export function classifyFirestoreSyncError(error: unknown): SyncErrorClassification {
+  let rawMessage = error instanceof Error ? error.message : String(error || '');
+  try {
+    if (rawMessage.startsWith('{')) {
+      const parsed = JSON.parse(rawMessage);
+      if (parsed && typeof parsed.error === 'string') {
+        rawMessage = parsed.error;
+      }
+    }
+  } catch {
+    // keep original message
+  }
+  const lower = rawMessage.toLowerCase();
+
+  if (lower.includes('resource-exhausted') || lower.includes('quota exceeded') || lower.includes('quota limit')) {
+    return {
+      kind: 'quota',
+      fatal: true,
+      rawMessage,
+      userMessage: `Firestore free daily quota reached. Quota resets tomorrow, or upgrade database "${FIRESTORE_DATABASE_ID}" in Firebase Console (project ${FIREBASE_PROJECT_ID}).`
+    };
+  }
+  if (lower.includes('permission-denied') || lower.includes('missing or insufficient permissions')) {
+    return {
+      kind: 'permission',
+      fatal: true,
+      rawMessage,
+      userMessage: `Cloud sync permission denied. Ensure you are signed in with ${ADMIN_EMAIL} and Firestore rules are deployed.`
+    };
+  }
+  if (lower.includes('unauthenticated') || lower.includes('unauthorized-domain') || lower.includes('auth/')) {
+    return {
+      kind: 'auth',
+      fatal: true,
+      rawMessage,
+      userMessage: 'Cloud sync authentication expired or domain is not authorized in Firebase Console → Authentication → Authorized domains.'
+    };
+  }
+  if (
+    lower.includes('unavailable') ||
+    lower.includes('client is offline') ||
+    lower.includes('could not reach cloud firestore') ||
+    lower.includes('network') ||
+    lower.includes('failed to fetch')
+  ) {
+    return {
+      kind: 'network',
+      fatal: true,
+      rawMessage,
+      userMessage: 'Cannot reach Cloud Firestore right now. Check your internet connection or firewall and retry.'
+    };
+  }
+  if (lower.includes('exceeds maximum size') || lower.includes('longer than')) {
+    return {
+      kind: 'size',
+      fatal: false,
+      rawMessage,
+      userMessage: 'One or more uploaded images exceeded Firestore’s 1 MB document limit. Please compress or re-upload smaller images.'
+    };
+  }
+  return {
+    kind: 'unknown',
+    fatal: false,
+    rawMessage,
+    userMessage: rawMessage || 'Cloud sync failed. Please retry.'
+  };
+}
+
+async function fitDataUrlForFirestore(dataUrl: string, maxChars = SAFE_FIRESTORE_IMAGE_CHARS): Promise<string | null> {
+  if (dataUrl.length <= maxChars) return dataUrl;
+  if (typeof document === 'undefined' || typeof Image === 'undefined') return null;
+
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const srcW = img.naturalWidth || img.width || 0;
+        const srcH = img.naturalHeight || img.height || 0;
+        if (!srcW || !srcH) {
+          resolve(null);
+          return;
+        }
+        const steps: Array<[number, number]> = [
+          [1800, 2200],
+          [1400, 1800],
+          [1100, 1400],
+          [850, 1100]
+        ];
+        for (const [maxW, maxH] of steps) {
+          let w = srcW;
+          let h = srcH;
+          if (w > maxW) {
+            h = Math.round((h * maxW) / w);
+            w = maxW;
+          }
+          if (h > maxH) {
+            w = Math.round((w * maxH) / h);
+            h = maxH;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, w);
+          canvas.height = Math.max(1, h);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) continue;
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          for (const q of [0.88, 0.78, 0.68, 0.58]) {
+            const candidate = canvas.toDataURL('image/jpeg', q);
+            if (candidate.length <= maxChars) {
+              resolve(candidate);
+              return;
+            }
+          }
+        }
+        resolve(null);
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
 }
 
 export async function syncFolderToFirestore(folder: ExamFolder): Promise<void> {
@@ -46,19 +202,26 @@ export async function syncFolderToFirestore(folder: ExamFolder): Promise<void> {
   try {
     const ref = doc(db, 'folders', folderId);
     const snap = await getDoc(ref);
-    const payload: Record<string, any> = {
-      id: folderId,
+    const mutableFields: Record<string, any> = {
       name: clampString(folder.name, 160) || 'Untitled Folder',
       targetClass: clampString(folder.targetClass || folder.category, 40) || '11th',
-      examCount: Math.max(0, Math.min(10000, Math.floor(Number(folder.examCount) || 0))),
-      createdByUid: snap.exists() ? snap.data().createdByUid : auth.currentUser.uid,
-      createdAt: snap.exists() ? snap.data().createdAt : serverTimestamp(),
+      examCount: safeInt(folder.examCount, 0, 0, 10000),
       updatedAt: serverTimestamp()
     };
-    if (folder.description) payload.description = clampString(folder.description, 500);
-    if (folder.color) payload.color = clampString(folder.color, 40);
+    if (folder.description) mutableFields.description = clampString(folder.description, 500);
+    if (folder.color) mutableFields.color = clampString(folder.color, 40);
 
-    await setDoc(ref, payload);
+    const existingData = snap.exists() ? snap.data() : null;
+    if (existingData && existingData.createdByUid === auth.currentUser.uid && existingData.createdAt) {
+      await updateDoc(ref, mutableFields);
+    } else {
+      await setDoc(ref, {
+        id: folderId,
+        ...mutableFields,
+        createdByUid: existingData?.createdByUid || auth.currentUser.uid,
+        createdAt: existingData?.createdAt || serverTimestamp()
+      });
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -112,37 +275,46 @@ export async function syncExamAndQuestionsToFirestore(
   const questionIds = resolvedQuestions.map(q => sanitizeFirestoreId(q.id, 'q'));
   const isPublic = exam.status !== 'Draft' && exam.isPublic !== false;
   const negMarksRaw = exam.negativeMarks !== undefined ? Number(exam.negativeMarks) : -1;
-  const normalizedNeg = negMarksRaw > 0 ? -Math.abs(negMarksRaw) : Math.max(-100, Math.min(0, Math.floor(negMarksRaw)));
+  const normalizedNeg = Number.isFinite(negMarksRaw)
+    ? safeInt(negMarksRaw > 0 ? -Math.abs(negMarksRaw) : negMarksRaw, -1, -100, 0)
+    : -1;
 
   try {
     const examRef = doc(db, 'exams', examId);
     const existingSnap = await getDoc(examRef);
 
-    const examPayload: Record<string, any> = {
-      id: examId,
+    const mutableExamFields: Record<string, any> = {
       code: clampString(exam.code || examId, 80) || examId,
       codeLower: clampString((exam.code || examId).toLowerCase().trim(), 80) || examId.toLowerCase(),
       title: clampString(exam.title, 200) || 'Mathematics Examination',
       targetClass: clampString(exam.targetClass, 40) || '11th',
-      durationMinutes: Math.max(1, Math.min(600, Math.floor(Number(exam.durationMinutes) || 60))),
-      totalMarks: Math.max(0, Math.min(10000, Math.floor(Number(exam.totalMarks) || resolvedQuestions.length * 4 || 0))),
-      positiveMarks: Math.max(0, Math.min(100, Math.floor(Number(exam.positiveMarks) || 4))),
+      durationMinutes: safeInt(exam.durationMinutes, 60, 1, 600),
+      totalMarks: safeInt(exam.totalMarks || resolvedQuestions.length * 4, 0, 0, 10000),
+      positiveMarks: safeInt(exam.positiveMarks, 4, 0, 100),
       negativeMarks: normalizedNeg,
-      passPercentage: Math.max(0, Math.min(100, Math.floor(Number(exam.passPercentage) || 35))),
+      passPercentage: safeInt(exam.passPercentage, 35, 0, 100),
       status: ['Live', 'Draft', 'Scheduled', 'Completed', 'Active', 'Published'].includes(exam.status)
         ? exam.status
         : 'Live',
       isPublic,
       questionIds,
-      createdByUid: existingSnap.exists() ? existingSnap.data().createdByUid : auth.currentUser.uid,
-      createdAt: existingSnap.exists() ? existingSnap.data().createdAt : serverTimestamp(),
       updatedAt: serverTimestamp()
     };
-    if (exam.folderId) examPayload.folderId = clampString(exam.folderId, 128);
-    if (exam.folderName) examPayload.folderName = clampString(exam.folderName, 160);
-    if (exam.examCategory) examPayload.examCategory = clampString(exam.examCategory, 40);
+    if (exam.folderId) mutableExamFields.folderId = clampString(exam.folderId, 128);
+    if (exam.folderName) mutableExamFields.folderName = clampString(exam.folderName, 160);
+    if (exam.examCategory) mutableExamFields.examCategory = clampString(exam.examCategory, 40);
 
-    await setDoc(examRef, examPayload);
+    const existingExamData = existingSnap.exists() ? existingSnap.data() : null;
+    if (existingExamData && existingExamData.createdByUid === auth.currentUser.uid && existingExamData.createdAt) {
+      await updateDoc(examRef, mutableExamFields);
+    } else {
+      await setDoc(examRef, {
+        id: examId,
+        ...mutableExamFields,
+        createdByUid: existingExamData?.createdByUid || auth.currentUser.uid,
+        createdAt: existingExamData?.createdAt || serverTimestamp()
+      });
+    }
 
     // Sync each question document under /exams/{examId}/questions/{questionId}
     const desiredIds = new Set<string>();
@@ -154,9 +326,16 @@ export async function syncExamAndQuestionsToFirestore(
       try {
         const qRef = doc(db, 'exams', examId, 'questions', qId);
         const existingQSnap = await getDoc(qRef);
-        const qPos = Math.max(0, Math.min(100, Math.floor(Number(q.marks ?? q.marksPositive) || 4)));
-        const qNegRaw = q.negativeMarks !== undefined ? Number(q.negativeMarks) : q.marksNegative !== undefined ? Number(q.marksNegative) : -1;
-        const qNegNorm = qNegRaw > 0 ? -Math.abs(qNegRaw) : Math.max(-100, Math.min(0, Math.floor(qNegRaw)));
+        const qPos = safeInt(q.marks ?? q.marksPositive, 4, 0, 100);
+        const qNegRaw =
+          q.negativeMarks !== undefined
+            ? Number(q.negativeMarks)
+            : q.marksNegative !== undefined
+            ? Number(q.marksNegative)
+            : -1;
+        const qNegNorm = Number.isFinite(qNegRaw)
+          ? safeInt(qNegRaw > 0 ? -Math.abs(qNegRaw) : qNegRaw, -1, -100, 0)
+          : -1;
 
         const safeOptions = Array.isArray(q.options)
           ? q.options.slice(0, 6).map((opt, idx) => ({
@@ -171,10 +350,8 @@ export async function syncExamAndQuestionsToFirestore(
         const meaningfulText = getMeaningfulQuestionText(q);
         const cleanText = qType === 'image' ? meaningfulText : (meaningfulText || q.questionText || '');
 
-        const qPayload: Record<string, any> = {
-          id: qId,
-          examId,
-          orderIndex: i,
+        const mutableQFields: Record<string, any> = {
+          orderIndex: safeInt(i, 0, 0, 500),
           code: clampString(q.code || qId, 80) || qId,
           subject: clampString(q.subject || 'Mathematics', 80) || 'Mathematics',
           type: ['single_choice', 'multiple_choice', 'numerical', 'integer'].includes(q.type)
@@ -188,48 +365,58 @@ export async function syncExamAndQuestionsToFirestore(
           marksPositive: qPos,
           marksNegative: qNegNorm,
           isPublic,
-          options: safeOptions,
-          createdByUid: existingQSnap.exists() ? existingQSnap.data().createdByUid : auth.currentUser.uid,
-          createdAt: existingQSnap.exists() ? existingQSnap.data().createdAt : serverTimestamp()
+          options: safeOptions
         };
 
         const chapterVal = q.chapter || q.topic;
         if (chapterVal) {
-          qPayload.chapter = clampString(chapterVal, 160);
-          qPayload.topic = clampString(q.topic || chapterVal, 160);
+          mutableQFields.chapter = clampString(chapterVal, 160);
+          mutableQFields.topic = clampString(q.topic || chapterVal, 160);
         }
-        if (q.difficulty) qPayload.difficulty = clampString(q.difficulty, 40);
-        if (q.targetClass || exam.targetClass) qPayload.targetClass = clampString(q.targetClass || exam.targetClass, 40);
-        if (q.folderId || exam.folderId) qPayload.folderId = clampString(q.folderId || exam.folderId, 128);
-        if (q.folderName || exam.folderName) qPayload.folderName = clampString(q.folderName || exam.folderName, 160);
-        if (q.tag) qPayload.tag = clampString(q.tag, 40);
-        if (q.questionImagePath) qPayload.questionImagePath = clampString(normalizeQuestionImageUrl(q.questionImagePath), 300);
+        if (q.difficulty) mutableQFields.difficulty = clampString(q.difficulty, 40);
+        if (q.targetClass || exam.targetClass) mutableQFields.targetClass = clampString(q.targetClass || exam.targetClass, 40);
+        if (q.folderId || exam.folderId) mutableQFields.folderId = clampString(q.folderId || exam.folderId, 128);
+        if (q.folderName || exam.folderName) mutableQFields.folderName = clampString(q.folderName || exam.folderName, 160);
+        if (q.tag) mutableQFields.tag = clampString(q.tag, 40);
+        if (q.questionImagePath) mutableQFields.questionImagePath = clampString(normalizeQuestionImageUrl(q.questionImagePath), 300);
 
         // Store questionImageUrl ONCE in Firestore doc (docToQuestion mirrors it back to both imageUrl & questionImageUrl)
         // so base64 payloads never double-count against Firestore's 1MB document ceiling.
         if (rawImageSrc) {
-          if (rawImageSrc.length <= 890000) {
-            qPayload.questionImageUrl = rawImageSrc;
-          } else if (q.questionImagePath) {
-            const fallbackUrl = normalizeQuestionImageUrl(q.questionImagePath);
-            console.warn(
-              `[FIRESTORE SYNC] Question ${qId} inline DataURL exceeded 890KB (${rawImageSrc.length} chars); referencing persisted path ${fallbackUrl}`
-            );
-            qPayload.questionImageUrl = clampString(fallbackUrl, 900000);
-          } else {
-            console.error(
-              `[FIRESTORE SYNC ERROR] Question ${qId} image exceeded 890KB (${rawImageSrc.length} chars) with no storage path fallback.`
-            );
+          if (rawImageSrc.length <= SAFE_FIRESTORE_IMAGE_CHARS) {
+            mutableQFields.questionImageUrl = rawImageSrc;
+          } else if (rawImageSrc.startsWith('data:')) {
+            const fitted = await fitDataUrlForFirestore(rawImageSrc, SAFE_FIRESTORE_IMAGE_CHARS);
+            if (fitted) {
+              mutableQFields.questionImageUrl = fitted;
+            } else if (q.questionImagePath) {
+              mutableQFields.questionImageUrl = clampString(normalizeQuestionImageUrl(q.questionImagePath), 900000);
+            } else {
+              console.warn(`[FIRESTORE SYNC] Question ${qId} image exceeded safe 820KB limit (${rawImageSrc.length} chars).`);
+            }
+          } else if (rawImageSrc.length <= 900000) {
+            mutableQFields.questionImageUrl = rawImageSrc;
           }
         }
         // Guarantee firestore.rules requirement: either questionText >= 1 or questionImageUrl >= 1
-        if (!qPayload.questionImageUrl && !qPayload.questionText) {
-          qPayload.questionText = `Question ${i + 1}`;
+        if (!mutableQFields.questionImageUrl && !mutableQFields.questionText) {
+          mutableQFields.questionText = `Question ${i + 1}`;
         }
-        if (q.formulaNote) qPayload.formulaNote = clampString(q.formulaNote, 1000);
-        if (q.explanation) qPayload.explanation = clampString(q.explanation, 3000);
+        if (q.formulaNote) mutableQFields.formulaNote = clampString(q.formulaNote, 1000);
+        if (q.explanation) mutableQFields.explanation = clampString(q.explanation, 3000);
 
-        await setDoc(qRef, qPayload);
+        const existingQData = existingQSnap.exists() ? existingQSnap.data() : null;
+        if (existingQData && existingQData.createdByUid === auth.currentUser.uid && existingQData.createdAt) {
+          await updateDoc(qRef, mutableQFields);
+        } else {
+          await setDoc(qRef, {
+            id: qId,
+            examId,
+            ...mutableQFields,
+            createdByUid: existingQData?.createdByUid || auth.currentUser.uid,
+            createdAt: existingQData?.createdAt || serverTimestamp()
+          });
+        }
       } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, qPath);
       }
@@ -243,6 +430,9 @@ export async function syncExamAndQuestionsToFirestore(
       }
     }
   } catch (error) {
+    if (isFormattedFirestoreError(error)) {
+      throw error;
+    }
     handleFirestoreError(error, OperationType.WRITE, examPath);
   }
 }
@@ -404,17 +594,37 @@ export async function fetchExamWithQuestionsFromFirestore(examCodeOrId: string):
     const cleanLower = cleanParam.toLowerCase();
     const safeLower = safeId.toLowerCase();
 
-    // 1. Direct ID lookup (catch permission-denied if private or missing)
+    // 1. Direct ID lookup (1 read)
     try {
       const directSnap = await getDoc(doc(db, 'exams', safeId));
       if (directSnap.exists()) {
         examData = directSnap.data();
       }
     } catch {
-      // Fall through to single-field public query
+      // Fall through to targeted query
     }
 
-    // 2. Single-field public exams list query (avoids missing composite index errors!)
+    // 2. Targeted codeLower lookup (1 read instead of full collection scan)
+    if (!examData) {
+      try {
+        const targetedQuery = isVerifiedAdminSignedIn()
+          ? query(collection(db, 'exams'), where('codeLower', '==', cleanLower), limit(1))
+          : query(
+              collection(db, 'exams'),
+              where('isPublic', '==', true),
+              where('codeLower', '==', cleanLower),
+              limit(1)
+            );
+        const targetedSnap = await getDocs(targetedQuery);
+        if (!targetedSnap.empty) {
+          examData = targetedSnap.docs[0].data();
+        }
+      } catch {
+        // Fall through to single-field public exams list query
+      }
+    }
+
+    // 3. Fallback single-field public exams list query (covers sanitized codes or index-free lookups)
     if (!examData) {
       const q = isVerifiedAdminSignedIn()
         ? collection(db, 'exams')

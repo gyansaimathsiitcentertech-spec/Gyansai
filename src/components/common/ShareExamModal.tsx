@@ -43,8 +43,8 @@ export const ShareExamModal: React.FC = () => {
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : liveStudioUrl;
   const isVercelHost = currentOrigin.toLowerCase().includes('vercel.app');
 
-  // Allow switching to public studio link to bypass Vercel "You Need Access" protection
-  const [selectedDomain, setSelectedDomain] = useState<'current' | 'aistudio'>(isVercelHost ? 'aistudio' : 'current');
+  // Default to the active hosting domain (including Vercel) while keeping a switcher available
+  const [selectedDomain, setSelectedDomain] = useState<'current' | 'aistudio'>('current');
 
   const activeOrigin = selectedDomain === 'aistudio' ? liveStudioUrl : currentOrigin;
   const slug = encodeURIComponent(currentExam?.code || currentExam?.id || '');

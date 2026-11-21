@@ -44,7 +44,9 @@ import {
   submitPublicRegistrationToFirestore,
   submitAttemptToFirestore,
   fetchAdminCloudState,
-  isVerifiedAdminSignedIn
+  isVerifiedAdminSignedIn,
+  classifyFirestoreSyncError,
+  sanitizeFirestoreId
 } from '../utils/firestoreSync';
 import {
   getQuestionImageSrc,
@@ -560,23 +562,44 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     setIsCloudSyncing(true);
     let failedCount = 0;
+    let fatalMessage: string | null = null;
     try {
       for (const f of foldersRef.current) {
-        await syncFolderToFirestore(f).catch(err => {
+        try {
+          await syncFolderToFirestore(f);
+        } catch (err) {
+          const info = classifyFirestoreSyncError(err);
           failedCount++;
-          console.warn('Folder sync error:', err);
-        });
+          console.warn('Folder sync error:', info.kind, info.rawMessage);
+          if (info.fatal) {
+            fatalMessage = info.userMessage;
+            break;
+          }
+        }
       }
-      for (const ex of examsRef.current) {
-        const resolvedQs = resolveExamQuestions(ex, questionsRef.current);
-        const enrichedExam: Exam = { ...ex, questions: resolvedQs };
-        await syncExamAndQuestionsToFirestore(enrichedExam, questionsRef.current).catch(err => {
-          failedCount++;
-          console.warn('Exam sync error:', ex.code, err);
-        });
+
+      if (!fatalMessage) {
+        for (const ex of examsRef.current) {
+          const resolvedQs = resolveExamQuestions(ex, questionsRef.current);
+          const enrichedExam: Exam = { ...ex, questions: resolvedQs };
+          try {
+            await syncExamAndQuestionsToFirestore(enrichedExam, questionsRef.current);
+          } catch (err) {
+            const info = classifyFirestoreSyncError(err);
+            failedCount++;
+            console.warn('Exam sync error:', ex.code, info.kind, info.rawMessage);
+            if (info.fatal) {
+              fatalMessage = info.userMessage;
+              break;
+            }
+          }
+        }
       }
-      if (failedCount > 0) {
-        showToast(`Cloud sync finished with ${failedCount} warning(s). Check large images or retry.`, 'error');
+
+      if (fatalMessage) {
+        showToast(fatalMessage, 'error');
+      } else if (failedCount > 0) {
+        showToast(`Cloud sync finished with ${failedCount} warning(s). Check oversized images or retry.`, 'error');
       } else {
         showToast('All exams & uploaded question images synced to Cloud!');
       }
@@ -593,8 +616,9 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const enrichedExam: Exam = { ...examObj, questions: resolvedQs };
       await syncExamAndQuestionsToFirestore(enrichedExam, questionsRef.current);
     } catch (err) {
-      console.warn('Single exam sync warning:', err);
-      showToast('Cloud sync warning: some exam data may need retry.', 'error');
+      const info = classifyFirestoreSyncError(err);
+      console.warn('Single exam sync warning:', info.kind, info.rawMessage);
+      showToast(info.userMessage || 'Cloud sync warning: some exam data may need retry.', 'error');
     } finally {
       setIsCloudSyncing(false);
     }
@@ -683,15 +707,57 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             }
           }
 
-          // Ensure local exams & folders not yet in Firestore are pushed immediately
+          // Push ONLY local folders & exams not yet present in Firestore (avoids unnecessary read/write amplification)
+          const existingCloudFolderIds = new Set(
+            (cloudState?.folders || []).map(f => sanitizeFirestoreId(f.id, 'folder').toLowerCase())
+          );
+          const existingCloudExamKeys = new Set<string>();
+          (cloudState?.exams || []).forEach(ce => {
+            if (ce.id) existingCloudExamKeys.add(sanitizeFirestoreId(ce.id, 'exam').toLowerCase());
+            if (ce.code) existingCloudExamKeys.add(ce.code.toLowerCase().trim());
+          });
+
+          let abortedBgSync = false;
           for (const f of foldersRef.current) {
-            await syncFolderToFirestore(f).catch(() => {});
+            const safeFolderKey = sanitizeFirestoreId(f.id, 'folder').toLowerCase();
+            if (existingCloudFolderIds.has(safeFolderKey)) continue;
+            try {
+              await syncFolderToFirestore(f);
+            } catch (err) {
+              const info = classifyFirestoreSyncError(err);
+              if (info.fatal) {
+                abortedBgSync = true;
+                showToast(info.userMessage, 'error');
+                break;
+              }
+            }
           }
-          for (const ex of examsRef.current) {
-            await syncExamAndQuestionsToFirestore(ex, questionsRef.current).catch(() => {});
+
+          if (!abortedBgSync) {
+            for (const ex of examsRef.current) {
+              const safeExamKey = sanitizeFirestoreId(ex.id, 'exam').toLowerCase();
+              const codeKey = (ex.code || '').toLowerCase().trim();
+              if (existingCloudExamKeys.has(safeExamKey) || (codeKey && existingCloudExamKeys.has(codeKey))) {
+                continue;
+              }
+              try {
+                const resolvedQs = resolveExamQuestions(ex, questionsRef.current);
+                await syncExamAndQuestionsToFirestore({ ...ex, questions: resolvedQs }, questionsRef.current);
+              } catch (err) {
+                const info = classifyFirestoreSyncError(err);
+                if (info.fatal) {
+                  showToast(info.userMessage, 'error');
+                  break;
+                }
+              }
+            }
           }
         } catch (err) {
-          console.warn('Cloud sync load error:', err);
+          const info = classifyFirestoreSyncError(err);
+          console.warn('Cloud sync load error:', info.kind, info.rawMessage);
+          if (info.kind === 'quota' || info.kind === 'permission') {
+            showToast(info.userMessage, 'error');
+          }
         } finally {
           setIsCloudSyncing(false);
         }
@@ -1294,14 +1360,17 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       })
       .catch(() => {});
 
-    // 3. Hydrate all public exams & original question images from Firestore for Student Portal & cross-device access
-    fetchAllPublicExamsFromFirestore()
-      .then(publicExams => {
-        if (publicExams.length > 0) {
-          mergeRemoteExamsAndQuestions(publicExams);
-        }
-      })
-      .catch(() => {});
+    // 3. Hydrate public exams from Firestore on portal views (skip on direct /?cbt= or /?exam= routes,
+    // which already perform a targeted single-exam lookup and avoid burning quota on full-collection scans)
+    if (!hasExamRouteInLocation()) {
+      fetchAllPublicExamsFromFirestore()
+        .then(publicExams => {
+          if (publicExams.length > 0) {
+            mergeRemoteExamsAndQuestions(publicExams);
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   // Dynamically sync browser tab favicon with custom logo/favicon
@@ -2092,6 +2161,32 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       showToast('Google Cloud Sync connected! Exams & image questions now sync across all mobile links.');
       return { success: true };
     } catch (err: any) {
+      const code = String(err?.code || '');
+      const host = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+      if (code === 'auth/unauthorized-domain') {
+        return {
+          success: false,
+          error: `Domain "${host}" is not authorized for Google Sign-In. Add "${host}" in Firebase Console → Authentication → Settings → Authorized domains.`
+        };
+      }
+      if (code === 'auth/popup-blocked') {
+        return {
+          success: false,
+          error: 'Google Sign-In popup was blocked by your browser. Please allow popups for this site and try again.'
+        };
+      }
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        return {
+          success: false,
+          error: 'Google Sign-In window was closed before completing. Please click Connect Cloud Sync again.'
+        };
+      }
+      if (code === 'auth/network-request-failed') {
+        return {
+          success: false,
+          error: 'Network error connecting to Google Auth. Check your internet connection or firewall and try again.'
+        };
+      }
       return {
         success: false,
         error: err?.message || 'Google Sign-In was cancelled or failed.'
