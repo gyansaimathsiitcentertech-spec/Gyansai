@@ -125,6 +125,7 @@ function syncExamPlugin() {
       const host = parsed.hostname.toLowerCase();
       if (host === 'localhost' || host === '127.0.0.1') return true;
       const knownPortalHosts = [
+        'gyansaipp.vercel.app',
         'ais-dev-f7jpkmgt4fqk7n2ogmc4x2-740969633609.asia-southeast1.run.app',
         'ais-pre-f7jpkmgt4fqk7n2ogmc4x2-740969633609.asia-southeast1.run.app'
       ];

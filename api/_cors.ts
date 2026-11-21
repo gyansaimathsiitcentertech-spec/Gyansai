@@ -54,8 +54,9 @@ export function isTrustedOrigin(origin: string | undefined, req: any): boolean {
     return true;
   }
 
-  // 3. This portal's own AI Studio preview/published hosts (HTTPS only)
+  // 3. This portal's own Vercel & AI Studio preview/published hosts (HTTPS only)
   const knownPortalHosts = [
+    'gyansaipp.vercel.app',
     'ais-dev-f7jpkmgt4fqk7n2ogmc4x2-740969633609.asia-southeast1.run.app',
     'ais-pre-f7jpkmgt4fqk7n2ogmc4x2-740969633609.asia-southeast1.run.app'
   ];
