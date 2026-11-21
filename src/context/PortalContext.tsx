@@ -43,16 +43,10 @@ import {
   fetchAllPublicExamsFromFirestore,
   submitPublicRegistrationToFirestore,
   submitAttemptToFirestore,
-  deleteAttemptFromFirestore,
-  syncPortalSettingsToFirestore,
-  syncPortalCatalogToFirestore,
-  syncAdminWorkspaceToFirestore,
-  subscribePublicPortalChanges,
   fetchAdminCloudState,
   isVerifiedAdminSignedIn,
   classifyFirestoreSyncError,
-  sanitizeFirestoreId,
-  type PortalCatalogId
+  sanitizeFirestoreId
 } from '../utils/firestoreSync';
 import {
   getQuestionImageSrc,
@@ -277,6 +271,36 @@ interface PortalContextType {
 }
 
 const STORAGE_PREFIX = 'gyansai_test_portal_v1_';
+const DELETED_PREFIX = `${STORAGE_PREFIX}deleted_`;
+
+function getDeletedIds(collection: string): Set<string> {
+  try {
+    const stored = localStorage.getItem(DELETED_PREFIX + collection);
+    const ids: unknown = stored ? JSON.parse(stored) : [];
+    return new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []);
+  } catch (error) {
+    console.error(`Error loading deleted ${collection} records:`, error);
+    return new Set();
+  }
+}
+
+function markDeleted(collection: string, ...ids: string[]): void {
+  const deleted = getDeletedIds(collection);
+  ids.filter(Boolean).forEach(id => deleted.add(id));
+  try {
+    localStorage.setItem(DELETED_PREFIX + collection, JSON.stringify(Array.from(deleted)));
+  } catch (error) {
+    console.error(`Error saving deleted ${collection} records:`, error);
+  }
+}
+
+function filterDeleted<T extends { id?: string; code?: string }>(collection: string, records: T[]): T[] {
+  const deleted = getDeletedIds(collection);
+  return records.filter(record =>
+    (!record.id || !deleted.has(record.id)) &&
+    (!record.code || !deleted.has(record.code))
+  );
+}
 
 function loadFromStorage<T>(key: string, defaultValue: T): T {
   try {
@@ -383,7 +407,7 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [settings, setSettings] = useState<InstituteSettings>(() =>
     loadFromStorage('settings', INITIAL_INSTITUTE_SETTINGS)
   );
-  const [users, setUsers] = useState<User[]>(() => loadFromStorage('users', INITIAL_USERS));
+  const [users, setUsers] = useState<User[]>(() => filterDeleted('users', loadFromStorage('users', INITIAL_USERS)));
   const [currentUser, setCurrentUser] = useState<User>(() => {
     try {
       const savedStudent = sessionStorage.getItem('cbt_active_student');
@@ -394,49 +418,26 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const storedUsers = loadFromStorage('users', INITIAL_USERS);
     return storedUsers[0] || INITIAL_USERS[0];
   });
-  const [batches, setBatches] = useState<Batch[]>(() => loadFromStorage('batches', INITIAL_BATCHES));
-  const [teachers, setTeachers] = useState<Teacher[]>(() => loadFromStorage('teachers', INITIAL_TEACHERS));
-  const [questions, setQuestions] = useState<Question[]>(() => {
-    try {
-      const hasSaved = typeof window !== 'undefined' && localStorage.getItem(STORAGE_PREFIX + 'questions') !== null;
-      const stored = loadFromStorage('questions', INITIAL_QUESTIONS);
-      if (hasSaved) return stored;
-      const existingIds = new Set(stored.map(q => q.id));
-      const missing = INITIAL_QUESTIONS.filter(q => !existingIds.has(q.id));
-      return missing.length > 0 ? [...stored, ...missing] : stored;
-    } catch {
-      return loadFromStorage('questions', INITIAL_QUESTIONS);
-    }
-  });
-  const [folders, setFolders] = useState<ExamFolder[]>(() => loadFromStorage('folders', INITIAL_EXAM_FOLDERS));
-  const [exams, setExams] = useState<Exam[]>(() => {
-    try {
-      const hasSaved = typeof window !== 'undefined' && localStorage.getItem(STORAGE_PREFIX + 'exams') !== null;
-      const stored = loadFromStorage('exams', INITIAL_EXAMS);
-      if (hasSaved) return stored;
-      const existingIds = new Set(stored.map(e => e.id));
-      const existingCodes = new Set(stored.map(e => (e.code || '').toLowerCase()));
-      const missing = INITIAL_EXAMS.filter(e => !existingIds.has(e.id) && !existingCodes.has((e.code || '').toLowerCase()));
-      return missing.length > 0 ? [...missing, ...stored] : stored;
-    } catch {
-      return loadFromStorage('exams', INITIAL_EXAMS);
-    }
-  });
-  const [attempts, setAttempts] = useState<ExamAttempt[]>(() => loadFromStorage('attempts', INITIAL_ATTEMPTS));
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => loadFromStorage('attendance', INITIAL_ATTENDANCE));
-  const [studyMaterials, setStudyMaterials] = useState<StudyMaterial[]>(() => loadFromStorage('studyMaterials', INITIAL_STUDY_MATERIAL));
-  const [notifications, setNotifications] = useState<NotificationItem[]>(() => loadFromStorage('notifications', INITIAL_NOTIFICATIONS));
-  const [courses, setCourses] = useState<Course[]>(() => loadFromStorage('courses', INITIAL_COURSES));
-  const [testSeries, setTestSeries] = useState<TestSeries[]>(() => loadFromStorage('testSeries', INITIAL_TEST_SERIES));
+  const [batches, setBatches] = useState<Batch[]>(() => filterDeleted('batches', loadFromStorage('batches', INITIAL_BATCHES)));
+  const [teachers, setTeachers] = useState<Teacher[]>(() => filterDeleted('teachers', loadFromStorage('teachers', INITIAL_TEACHERS)));
+  const [questions, setQuestions] = useState<Question[]>(() => filterDeleted('questions', loadFromStorage('questions', INITIAL_QUESTIONS)));
+  const [folders, setFolders] = useState<ExamFolder[]>(() => filterDeleted('folders', loadFromStorage('folders', INITIAL_EXAM_FOLDERS)));
+  const [exams, setExams] = useState<Exam[]>(() => filterDeleted('exams', loadFromStorage('exams', INITIAL_EXAMS)));
+  const [attempts, setAttempts] = useState<ExamAttempt[]>(() => filterDeleted('attempts', loadFromStorage('attempts', INITIAL_ATTEMPTS)));
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => filterDeleted('attendance', loadFromStorage('attendance', INITIAL_ATTENDANCE)));
+  const [studyMaterials, setStudyMaterials] = useState<StudyMaterial[]>(() => filterDeleted('studyMaterials', loadFromStorage('studyMaterials', INITIAL_STUDY_MATERIAL)));
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => filterDeleted('notifications', loadFromStorage('notifications', INITIAL_NOTIFICATIONS)));
+  const [courses, setCourses] = useState<Course[]>(() => filterDeleted('courses', loadFromStorage('courses', INITIAL_COURSES)));
+  const [testSeries, setTestSeries] = useState<TestSeries[]>(() => filterDeleted('testSeries', loadFromStorage('testSeries', INITIAL_TEST_SERIES)));
   const [payments, setPayments] = useState<PaymentTransaction[]>(() => {
     try {
       const approvals = localStorage.getItem('gyansai_payment_approvals_v1');
       if (approvals) {
         const parsed = JSON.parse(approvals);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return filterDeleted('payments', parsed);
       }
     } catch {}
-    return loadFromStorage('payments', INITIAL_PAYMENTS);
+    return filterDeleted('payments', loadFromStorage('payments', INITIAL_PAYMENTS));
   });
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() =>
     loadFromStorage('admin_auth', false)
@@ -573,79 +574,22 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const foldersRef = useRef(folders);
   useEffect(() => { foldersRef.current = folders; }, [folders]);
 
-  const settingsRef = useRef(settings);
-  useEffect(() => { settingsRef.current = settings; }, [settings]);
-
-  const usersRef = useRef(users);
-  useEffect(() => { usersRef.current = users; }, [users]);
-
-  const batchesRef = useRef(batches);
-  useEffect(() => { batchesRef.current = batches; }, [batches]);
-
-  const teachersRef = useRef(teachers);
-  useEffect(() => { teachersRef.current = teachers; }, [teachers]);
-
-  const coursesRef = useRef(courses);
-  useEffect(() => { coursesRef.current = courses; }, [courses]);
-
-  const testSeriesRef = useRef(testSeries);
-  useEffect(() => { testSeriesRef.current = testSeries; }, [testSeries]);
-
-  const studyMaterialsRef = useRef(studyMaterials);
-  useEffect(() => { studyMaterialsRef.current = studyMaterials; }, [studyMaterials]);
-
-  const notificationsRef = useRef(notifications);
-  useEffect(() => { notificationsRef.current = notifications; }, [notifications]);
-
-  const attendanceRef = useRef(attendance);
-  useEffect(() => { attendanceRef.current = attendance; }, [attendance]);
-
-  const paymentsRef = useRef(payments);
-  useEffect(() => { paymentsRef.current = payments; }, [payments]);
-
-  const pushAdminMutationToCloud = (label: string, task: () => Promise<void>) => {
-    if (!isVerifiedAdminSignedIn()) return;
-    task().catch(err => {
-      const info = classifyFirestoreSyncError(err);
-      console.warn(`Cloud sync warning (${label}):`, info.kind, info.rawMessage);
-      if (info.fatal) {
-        showToast(info.userMessage, 'error');
-      }
-    });
-  };
-
   const syncAllExamsToCloud = async () => {
     if (!isVerifiedAdminSignedIn()) {
-      showToast('Please connect Google Cloud Sync first so all Admin changes reflect across devices.', 'error');
+      showToast('Please connect Google Cloud Sync first so student mobile links work across devices.', 'error');
       return;
     }
     setIsCloudSyncing(true);
     let failedCount = 0;
     let fatalMessage: string | null = null;
     try {
-      // 1. Push global portal settings, public catalogs, and admin workspace records
-      const portalSyncTasks: Array<[string, () => Promise<void>]> = [
-        ['portal_settings', () => syncPortalSettingsToFirestore(settingsRef.current)],
-        ['courses', () => syncPortalCatalogToFirestore('courses', coursesRef.current)],
-        ['test_series', () => syncPortalCatalogToFirestore('test_series', testSeriesRef.current)],
-        ['batches', () => syncPortalCatalogToFirestore('batches', batchesRef.current)],
-        ['study_materials', () => syncPortalCatalogToFirestore('study_materials', studyMaterialsRef.current)],
-        ['notifications', () => syncPortalCatalogToFirestore('notifications', notificationsRef.current)],
-        ['teachers_public', () => syncPortalCatalogToFirestore('teachers_public', teachersRef.current)],
-        ['students', () => syncAdminWorkspaceToFirestore('students', { items: usersRef.current })],
-        ['teachers_private', () => syncAdminWorkspaceToFirestore('teachers_private', { items: teachersRef.current })],
-        ['attendance', () => syncAdminWorkspaceToFirestore('attendance', { items: attendanceRef.current })],
-        ['payments', () => syncAdminWorkspaceToFirestore('payments', { items: paymentsRef.current })],
-        ['question_bank', () => syncAdminWorkspaceToFirestore('question_bank', { items: questionsRef.current })]
-      ];
-
-      for (const [label, runTask] of portalSyncTasks) {
+      for (const f of foldersRef.current) {
         try {
-          await runTask();
+          await syncFolderToFirestore(f);
         } catch (err) {
           const info = classifyFirestoreSyncError(err);
           failedCount++;
-          console.warn(`Portal sync error (${label}):`, info.kind, info.rawMessage);
+          console.warn('Folder sync error:', info.kind, info.rawMessage);
           if (info.fatal) {
             fatalMessage = info.userMessage;
             break;
@@ -653,24 +597,6 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       }
 
-      // 2. Push folders
-      if (!fatalMessage) {
-        for (const f of foldersRef.current) {
-          try {
-            await syncFolderToFirestore(f);
-          } catch (err) {
-            const info = classifyFirestoreSyncError(err);
-            failedCount++;
-            console.warn('Folder sync error:', info.kind, info.rawMessage);
-            if (info.fatal) {
-              fatalMessage = info.userMessage;
-              break;
-            }
-          }
-        }
-      }
-
-      // 3. Push exams & question images
       if (!fatalMessage) {
         for (const ex of examsRef.current) {
           const resolvedQs = resolveExamQuestions(ex, questionsRef.current);
@@ -694,7 +620,7 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       } else if (failedCount > 0) {
         showToast(`Cloud sync finished with ${failedCount} warning(s). Check oversized images or retry.`, 'error');
       } else {
-        showToast('All portal settings, courses, test series, exams & images synced to Cloud!');
+        showToast('All exams & uploaded question images synced to Cloud!');
       }
     } finally {
       setIsCloudSyncing(false);
@@ -717,309 +643,151 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const cloudSyncInFlightRef = useRef(false);
-
-  const performAdminCloudAutoSync = async (options?: { notifySuccess?: boolean }) => {
-    if (!isVerifiedAdminSignedIn() || cloudSyncInFlightRef.current) return;
-    cloudSyncInFlightRef.current = true;
-    setIsCloudSyncing(true);
-    try {
-      const cloudState = await fetchAdminCloudState();
-      if (cloudState) {
-        if (cloudState.folders.length > 0) {
-          setFolders(prev => {
-            const map = new Map(prev.map(f => [f.id, f]));
-            cloudState.folders.forEach(cf => map.set(cf.id, { ...(map.get(cf.id) || {}), ...cf }));
-            const merged = Array.from(map.values());
-            foldersRef.current = merged;
-            saveToStorage('folders', merged);
-            return merged;
-          });
-        }
-        if (cloudState.questions.length > 0) {
-          setQuestions(prev => {
-            const map = new Map(prev.map(q => [q.id, q]));
-            cloudState.questions.forEach(cq => {
-              const ex = map.get(cq.id);
-              map.set(cq.id, mergeQuestionRecord(cq, ex));
-            });
-            const merged = Array.from(map.values());
-            questionsRef.current = merged;
-            saveToStorage('questions', merged);
-            return merged;
-          });
-        }
-        if (cloudState.exams.length > 0) {
-          setExams(prev => {
-            const next = [...prev];
-            cloudState.exams.forEach(ce => {
-              const idx = next.findIndex(
-                e => e.id.toLowerCase() === ce.id.toLowerCase() || e.code.toLowerCase() === ce.code.toLowerCase()
-              );
-              if (idx >= 0) {
-                const existing = next[idx];
-                const cloudHasQs = ce.questions && ce.questions.length > 0;
-                next[idx] = {
-                  ...existing,
-                  ...ce,
-                  questions: cloudHasQs
-                    ? mergeQuestionArrays(ce.questions, existing.questions)
-                    : existing.questions,
-                  sections: cloudHasQs ? ce.sections : existing.sections
-                };
-              } else {
-                next.unshift(ce);
-              }
-            });
-            examsRef.current = next;
-            saveToStorage('exams', next);
-            return next;
-          });
-        }
-        if (cloudState.registrations.length > 0) {
-          setUsers(prev => {
-            const map = new Map(prev.map(u => [u.id, u]));
-            cloudState.registrations.forEach(reg => {
-              const existingByPhone = prev.find(
-                u => u.phone && reg.phone && u.phone.replace(/\D/g, '') === reg.phone.replace(/\D/g, '')
-              );
-              if (!existingByPhone) {
-                map.set(reg.id, reg);
-              }
-            });
-            const merged = Array.from(map.values());
-            saveToStorage('users', merged);
-            return merged;
-          });
-        }
-        if (cloudState.attempts.length > 0) {
-          setAttempts(prev => {
-            const map = new Map(prev.map(a => [a.id, a]));
-            cloudState.attempts.forEach(ca => {
-              if (!map.has(ca.id)) map.set(ca.id, ca);
-            });
-            const merged = Array.from(map.values());
-            saveToStorage('attempts', merged);
-            return merged;
-          });
-        }
-        // Hydrate portal settings, public catalog, and admin workspace from Cloud if present
-        if (cloudState.settings) {
-          setSettings(prev => {
-            const merged = { ...prev, ...cloudState.settings };
-            settingsRef.current = merged;
-            saveToStorage('settings', merged);
-            return merged;
-          });
-        }
-        if (cloudState.catalog.courses) {
-          coursesRef.current = cloudState.catalog.courses;
-          saveToStorage('courses', cloudState.catalog.courses);
-          setCourses(cloudState.catalog.courses);
-        }
-        if (cloudState.catalog.test_series) {
-          testSeriesRef.current = cloudState.catalog.test_series;
-          saveToStorage('testSeries', cloudState.catalog.test_series);
-          setTestSeries(cloudState.catalog.test_series);
-        }
-        if (cloudState.catalog.batches) {
-          batchesRef.current = cloudState.catalog.batches;
-          saveToStorage('batches', cloudState.catalog.batches);
-          setBatches(cloudState.catalog.batches);
-        }
-        if (cloudState.catalog.study_materials) {
-          studyMaterialsRef.current = cloudState.catalog.study_materials;
-          saveToStorage('studyMaterials', cloudState.catalog.study_materials);
-          setStudyMaterials(cloudState.catalog.study_materials);
-        }
-        if (cloudState.catalog.notifications) {
-          notificationsRef.current = cloudState.catalog.notifications;
-          saveToStorage('notifications', cloudState.catalog.notifications);
-          setNotifications(cloudState.catalog.notifications);
-        }
-        if (cloudState.workspace.teachers_private?.items) {
-          teachersRef.current = cloudState.workspace.teachers_private.items;
-          saveToStorage('teachers', cloudState.workspace.teachers_private.items);
-          setTeachers(cloudState.workspace.teachers_private.items);
-        } else if (cloudState.catalog.teachers_public) {
-          teachersRef.current = cloudState.catalog.teachers_public;
-          saveToStorage('teachers', cloudState.catalog.teachers_public);
-          setTeachers(cloudState.catalog.teachers_public);
-        }
-        if (cloudState.workspace.students?.items) {
-          setUsers(prev => {
-            const map = new Map<string, User>();
-            cloudState.workspace.students!.items!.forEach((u: User) => map.set(u.id, u));
-            prev.forEach(u => {
-              if (!map.has(u.id)) map.set(u.id, u);
-            });
-            const merged = Array.from(map.values());
-            usersRef.current = merged;
-            saveToStorage('users', merged);
-            return merged;
-          });
-        }
-        if (cloudState.workspace.attendance?.items) {
-          attendanceRef.current = cloudState.workspace.attendance.items;
-          saveToStorage('attendance', cloudState.workspace.attendance.items);
-          setAttendance(cloudState.workspace.attendance.items);
-        }
-        if (cloudState.workspace.payments?.items) {
-          paymentsRef.current = cloudState.workspace.payments.items;
-          saveToStorage('payments', cloudState.workspace.payments.items);
-          setPayments(cloudState.workspace.payments.items);
-        }
-        if (cloudState.workspace.question_bank?.items && cloudState.workspace.question_bank.items.length > 0) {
-          setQuestions(prev => {
-            const map = new Map(prev.map(q => [q.id, q]));
-            cloudState.workspace.question_bank!.items!.forEach((q: Question) => {
-              map.set(q.id, mergeQuestionRecord(q, map.get(q.id)));
-            });
-            const merged = Array.from(map.values());
-            questionsRef.current = merged;
-            saveToStorage('questions', merged);
-            return merged;
-          });
-        }
-      }
-
-      // Push any missing portal config / catalog / workspace docs to Cloud so first-time setup syncs automatically
-      let abortedBgSync = false;
-      let pushedItems = 0;
-
-      const missingPortalBootstraps: Array<() => Promise<void>> = [];
-      if (!cloudState?.settings) {
-        missingPortalBootstraps.push(() => syncPortalSettingsToFirestore(settingsRef.current));
-      }
-      if (!cloudState?.catalog.courses) {
-        missingPortalBootstraps.push(() => syncPortalCatalogToFirestore('courses', coursesRef.current));
-      }
-      if (!cloudState?.catalog.test_series) {
-        missingPortalBootstraps.push(() => syncPortalCatalogToFirestore('test_series', testSeriesRef.current));
-      }
-      if (!cloudState?.catalog.batches) {
-        missingPortalBootstraps.push(() => syncPortalCatalogToFirestore('batches', batchesRef.current));
-      }
-      if (!cloudState?.catalog.study_materials) {
-        missingPortalBootstraps.push(() => syncPortalCatalogToFirestore('study_materials', studyMaterialsRef.current));
-      }
-      if (!cloudState?.catalog.notifications) {
-        missingPortalBootstraps.push(() => syncPortalCatalogToFirestore('notifications', notificationsRef.current));
-      }
-      if (!cloudState?.catalog.teachers_public) {
-        missingPortalBootstraps.push(() => syncPortalCatalogToFirestore('teachers_public', teachersRef.current));
-      }
-      if (!cloudState?.workspace.teachers_private) {
-        missingPortalBootstraps.push(() => syncAdminWorkspaceToFirestore('teachers_private', { items: teachersRef.current }));
-      }
-      if (!cloudState?.workspace.students) {
-        missingPortalBootstraps.push(() => syncAdminWorkspaceToFirestore('students', { items: usersRef.current }));
-      }
-      if (!cloudState?.workspace.attendance) {
-        missingPortalBootstraps.push(() => syncAdminWorkspaceToFirestore('attendance', { items: attendanceRef.current }));
-      }
-      if (!cloudState?.workspace.payments) {
-        missingPortalBootstraps.push(() => syncAdminWorkspaceToFirestore('payments', { items: paymentsRef.current }));
-      }
-
-      for (const runBootstrap of missingPortalBootstraps) {
-        try {
-          await runBootstrap();
-          pushedItems++;
-        } catch (err) {
-          const info = classifyFirestoreSyncError(err);
-          if (info.fatal) {
-            abortedBgSync = true;
-            showToast(info.userMessage, 'error');
-            break;
-          }
-        }
-      }
-
-      // Push local folders & exams that are missing in Firestore OR have newly added local questions/images
-      const existingCloudFolderIds = new Set(
-        (cloudState?.folders || []).map(f => sanitizeFirestoreId(f.id, 'folder').toLowerCase())
-      );
-      const cloudExamsByKey = new Map<string, Exam>();
-      (cloudState?.exams || []).forEach(ce => {
-        if (ce.id) cloudExamsByKey.set(sanitizeFirestoreId(ce.id, 'exam').toLowerCase(), ce);
-        if (ce.code) cloudExamsByKey.set(ce.code.toLowerCase().trim(), ce);
-      });
-
-      if (!abortedBgSync) {
-        for (const f of foldersRef.current) {
-          const safeFolderKey = sanitizeFirestoreId(f.id, 'folder').toLowerCase();
-          if (existingCloudFolderIds.has(safeFolderKey)) continue;
-          try {
-            await syncFolderToFirestore(f);
-            pushedItems++;
-          } catch (err) {
-            const info = classifyFirestoreSyncError(err);
-            if (info.fatal) {
-              abortedBgSync = true;
-              showToast(info.userMessage, 'error');
-              break;
-            }
-          }
-        }
-      }
-
-      if (!abortedBgSync) {
-        for (const ex of examsRef.current) {
-          const safeExamKey = sanitizeFirestoreId(ex.id, 'exam').toLowerCase();
-          const codeKey = (ex.code || '').toLowerCase().trim();
-          const cloudExam = cloudExamsByKey.get(safeExamKey) || (codeKey ? cloudExamsByKey.get(codeKey) : undefined);
-          const resolvedQs = resolveExamQuestions(ex, questionsRef.current);
-
-          if (cloudExam) {
-            const cloudQCount = Array.isArray(cloudExam.questions) ? cloudExam.questions.length : 0;
-            const localImgCount = resolvedQs.filter(q => Boolean(getQuestionImageSrc(q))).length;
-            const cloudImgCount = (cloudExam.questions || []).filter(q => Boolean(getQuestionImageSrc(q))).length;
-            // Skip exams that are already completely up to date in Firestore
-            if (resolvedQs.length <= cloudQCount && localImgCount <= cloudImgCount) {
-              continue;
-            }
-          }
-
-          try {
-            await syncExamAndQuestionsToFirestore({ ...ex, questions: resolvedQs }, questionsRef.current);
-            pushedItems++;
-          } catch (err) {
-            const info = classifyFirestoreSyncError(err);
-            if (info.fatal) {
-              abortedBgSync = true;
-              showToast(info.userMessage, 'error');
-              break;
-            }
-          }
-        }
-      }
-
-      if (!abortedBgSync && options?.notifySuccess) {
-        showToast(
-          pushedItems > 0
-            ? `Cloud Sync complete — synced ${pushedItems} updated item(s) to Cloud!`
-            : 'Cloud Sync complete — portal settings, courses & exams are up to date!'
-        );
-      }
-    } catch (err) {
-      const info = classifyFirestoreSyncError(err);
-      console.warn('Cloud sync load error:', info.kind, info.rawMessage);
-      if (info.fatal || options?.notifySuccess) {
-        showToast(info.userMessage, 'error');
-      }
-    } finally {
-      cloudSyncInFlightRef.current = false;
-      setIsCloudSyncing(false);
-    }
-  };
-
-  // Monitor Firebase Auth state for automatic admin cloud sync
+  // Monitor Firebase Auth state for admin cloud sync
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser && fbUser.emailVerified && fbUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
         setFirebaseAdminEmail(fbUser.email);
-        await performAdminCloudAutoSync({ notifySuccess: false });
+        setIsCloudSyncing(true);
+        try {
+          const cloudState = await fetchAdminCloudState();
+          if (cloudState) {
+            if (cloudState.folders.length > 0) {
+              setFolders(prev => {
+                const map = new Map(prev.map(f => [f.id, f]));
+                cloudState.folders.forEach(cf => {
+                  if (!getDeletedIds('folders').has(cf.id)) {
+                    map.set(cf.id, { ...cf, ...(map.get(cf.id) || {}) });
+                  }
+                });
+                const merged = Array.from(map.values());
+                saveToStorage('folders', merged);
+                return merged;
+              });
+            }
+            if (cloudState.questions.length > 0) {
+              setQuestions(prev => {
+                const map = new Map(prev.map(q => [q.id, q]));
+                cloudState.questions.forEach(cq => {
+                  if (getDeletedIds('questions').has(cq.id)) return;
+                  const ex = map.get(cq.id);
+                  map.set(cq.id, ex ? mergeQuestionRecord(ex, cq) : cq);
+                });
+                const merged = Array.from(map.values());
+                saveToStorage('questions', merged);
+                return merged;
+              });
+            }
+            if (cloudState.exams.length > 0) {
+              setExams(prev => {
+                const next = [...prev];
+                cloudState.exams.forEach(ce => {
+                  if (getDeletedIds('exams').has(ce.id)) return;
+                  const idx = next.findIndex(
+                    e => e.id.toLowerCase() === ce.id.toLowerCase() || e.code.toLowerCase() === ce.code.toLowerCase()
+                  );
+                  if (idx >= 0) {
+                    const existing = next[idx];
+                    const cloudHasQs = ce.questions && ce.questions.length > 0;
+                    next[idx] = {
+                      ...ce,
+                      ...existing,
+                      questions: cloudHasQs
+                        ? mergeQuestionArrays(existing.questions, ce.questions)
+                        : existing.questions,
+                      sections: existing.sections?.length ? existing.sections : ce.sections
+                    };
+                  } else {
+                    next.unshift(ce);
+                  }
+                });
+                saveToStorage('exams', next);
+                return next;
+              });
+            }
+            if (cloudState.registrations.length > 0) {
+              setUsers(prev => {
+                const map = new Map(prev.map(u => [u.id, u]));
+                cloudState.registrations.forEach(reg => {
+                  if (getDeletedIds('users').has(reg.id)) return;
+                  const existingByPhone = prev.find(u => u.phone && reg.phone && u.phone.replace(/\D/g, '') === reg.phone.replace(/\D/g, ''));
+                  if (!existingByPhone) {
+                    map.set(reg.id, reg);
+                  }
+                });
+                const merged = Array.from(map.values());
+                saveToStorage('users', merged);
+                return merged;
+              });
+            }
+            if (cloudState.attempts.length > 0) {
+              setAttempts(prev => {
+                const map = new Map(prev.map(a => [a.id, a]));
+                cloudState.attempts.forEach(ca => {
+                  if (getDeletedIds('attempts').has(ca.id)) return;
+                  if (!map.has(ca.id)) map.set(ca.id, ca);
+                });
+                const merged = Array.from(map.values());
+                saveToStorage('attempts', merged);
+                return merged;
+              });
+            }
+          }
+
+          // Push ONLY local folders & exams not yet present in Firestore (avoids unnecessary read/write amplification)
+          const existingCloudFolderIds = new Set(
+            (cloudState?.folders || []).map(f => sanitizeFirestoreId(f.id, 'folder').toLowerCase())
+          );
+          const existingCloudExamKeys = new Set<string>();
+          (cloudState?.exams || []).forEach(ce => {
+            if (ce.id) existingCloudExamKeys.add(sanitizeFirestoreId(ce.id, 'exam').toLowerCase());
+            if (ce.code) existingCloudExamKeys.add(ce.code.toLowerCase().trim());
+          });
+
+          let abortedBgSync = false;
+          for (const f of foldersRef.current) {
+            const safeFolderKey = sanitizeFirestoreId(f.id, 'folder').toLowerCase();
+            if (existingCloudFolderIds.has(safeFolderKey)) continue;
+            try {
+              await syncFolderToFirestore(f);
+            } catch (err) {
+              const info = classifyFirestoreSyncError(err);
+              if (info.fatal) {
+                abortedBgSync = true;
+                showToast(info.userMessage, 'error');
+                break;
+              }
+            }
+          }
+
+          if (!abortedBgSync) {
+            for (const ex of examsRef.current) {
+              const safeExamKey = sanitizeFirestoreId(ex.id, 'exam').toLowerCase();
+              const codeKey = (ex.code || '').toLowerCase().trim();
+              if (existingCloudExamKeys.has(safeExamKey) || (codeKey && existingCloudExamKeys.has(codeKey))) {
+                continue;
+              }
+              try {
+                const resolvedQs = resolveExamQuestions(ex, questionsRef.current);
+                await syncExamAndQuestionsToFirestore({ ...ex, questions: resolvedQs }, questionsRef.current);
+              } catch (err) {
+                const info = classifyFirestoreSyncError(err);
+                if (info.fatal) {
+                  showToast(info.userMessage, 'error');
+                  break;
+                }
+              }
+            }
+          }
+        } catch (err) {
+          const info = classifyFirestoreSyncError(err);
+          console.warn('Cloud sync load error:', info.kind, info.rawMessage);
+          if (info.kind === 'quota' || info.kind === 'permission') {
+            showToast(info.userMessage, 'error');
+          }
+        } finally {
+          setIsCloudSyncing(false);
+        }
       } else {
         setFirebaseAdminEmail(null);
       }
@@ -1050,13 +818,16 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
             const cloudExam = cloudResult.status === 'fulfilled' ? cloudResult.value : null;
             const apiExam = apiResult.status === 'fulfilled' ? apiResult.value : null;
+            const availableExams = filterDeleted('exams', [cloudExam, apiExam].filter((exam): exam is Exam => Boolean(exam)));
+            const availableCloudExam = cloudExam && availableExams.includes(cloudExam) ? cloudExam : null;
+            const availableApiExam = apiExam && availableExams.includes(apiExam) ? apiExam : null;
 
-            if (!cloudExam && !apiExam) return null;
+            if (!availableCloudExam && !availableApiExam) return null;
 
-            const baseExam = cloudExam && (!apiExam || (cloudExam.questions && cloudExam.questions.length > 0))
-              ? cloudExam
-              : (apiExam || cloudExam)!;
-            const altExam = baseExam === cloudExam ? apiExam : cloudExam;
+            const baseExam = availableCloudExam && (!availableApiExam || (availableCloudExam.questions && availableCloudExam.questions.length > 0))
+              ? availableCloudExam
+              : (availableApiExam || availableCloudExam)!;
+            const altExam = baseExam === availableCloudExam ? availableApiExam : availableCloudExam;
 
             const mergedQs = mergeQuestionArrays(baseExam.questions, altExam?.questions);
             return {
@@ -1517,10 +1288,12 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     const mergeRemoteExamsAndQuestions = (remoteExams: Exam[]) => {
       if (!Array.isArray(remoteExams) || remoteExams.length === 0) return;
+      remoteExams = filterDeleted('exams', remoteExams);
+      if (remoteExams.length === 0) return;
       const allRemoteQs: Question[] = [];
       remoteExams.forEach((ex: Exam) => {
         if (Array.isArray(ex?.questions)) {
-          ex.questions.forEach((q: Question) => {
+          filterDeleted('questions', ex.questions).forEach((q: Question) => {
             if (q && q.id) allRemoteQs.push(q);
           });
         }
@@ -1530,7 +1303,7 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           const map = new Map(prev.map(q => [q.id, q]));
           allRemoteQs.forEach(q => {
             const existing = map.get(q.id);
-            map.set(q.id, mergeQuestionRecord(q, existing));
+            map.set(q.id, existing ? mergeQuestionRecord(existing, q) : q);
           });
           const mergedQs = Array.from(map.values());
           questionsRef.current = mergedQs;
@@ -1542,6 +1315,7 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setExams(prev => {
         const next = [...prev];
         remoteExams.forEach((ex: Exam) => {
+          if (getDeletedIds('exams').has(ex.id)) return;
           if (!ex || (!ex.id && !ex.code)) return;
           const idx = next.findIndex(
             item =>
@@ -1551,12 +1325,12 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           if (idx >= 0) {
             const existing = next[idx];
             next[idx] = {
-              ...existing,
               ...ex,
-              questions: mergeQuestionArrays(ex.questions, existing.questions) || existing.questions,
-              sections: (ex.sections && ex.sections.length > 0 && ex.sections.some(s => (s.questionIds || []).length > 0))
-                ? ex.sections
-                : existing.sections
+              ...existing,
+              questions: mergeQuestionArrays(existing.questions, ex.questions) || existing.questions,
+              sections: (existing.sections && existing.sections.length > 0 && existing.sections.some(s => (s.questionIds || []).length > 0))
+                ? existing.sections
+                : ex.sections
             };
           } else {
             next.unshift(ex);
@@ -1573,8 +1347,11 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (Array.isArray(idbQuestions) && idbQuestions.length > 0) {
         setQuestions(prev => {
           const map = new Map(prev.map(q => [q.id, q]));
-          idbQuestions.forEach(iq => {
-            if (iq && iq.id) map.set(iq.id, mergeQuestionRecord(iq, map.get(iq.id)));
+          filterDeleted('questions', idbQuestions).forEach(iq => {
+            if (iq && iq.id) {
+              const existing = map.get(iq.id);
+              map.set(iq.id, existing ? mergeQuestionRecord(existing, iq) : iq);
+            }
           });
           const merged = Array.from(map.values());
           questionsRef.current = merged;
@@ -1597,8 +1374,8 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           setUsers(prev => {
             const map = new Map(prev.map(u => [u.id, u]));
             json.data.forEach((stu: User) => {
-              if (stu && stu.id) {
-                map.set(stu.id, { ...(map.get(stu.id) || {}), ...stu });
+              if (stu && stu.id && !getDeletedIds('users').has(stu.id)) {
+                map.set(stu.id, { ...stu, ...(map.get(stu.id) || {}) });
               }
             });
             const merged = Array.from(map.values());
@@ -1630,175 +1407,11 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         })
         .catch(() => {});
     }
-
-    // 4. Live real-time Firestore subscription for public portal settings, catalog, and exams
-    // so every Admin change reflects immediately across all browsers & devices
-    const unsubscribePortal = subscribePublicPortalChanges({
-      onSettings: (settingsPatch) => {
-        setSettings(prev => {
-          const merged = { ...prev, ...settingsPatch };
-          settingsRef.current = merged;
-          saveToStorage('settings', merged);
-          return merged;
-        });
-      },
-      onCatalog: (catalogId: PortalCatalogId, items: any[]) => {
-        if (catalogId === 'courses') {
-          coursesRef.current = items;
-          saveToStorage('courses', items);
-          setCourses(items);
-        } else if (catalogId === 'test_series') {
-          testSeriesRef.current = items;
-          saveToStorage('testSeries', items);
-          setTestSeries(items);
-        } else if (catalogId === 'batches') {
-          batchesRef.current = items;
-          saveToStorage('batches', items);
-          setBatches(items);
-        } else if (catalogId === 'study_materials') {
-          studyMaterialsRef.current = items;
-          saveToStorage('studyMaterials', items);
-          setStudyMaterials(items);
-        } else if (catalogId === 'notifications') {
-          notificationsRef.current = items;
-          saveToStorage('notifications', items);
-          setNotifications(items);
-        } else if (catalogId === 'teachers_public') {
-          setTeachers(prev => {
-            const byId = new Map(prev.map(t => [t.id, t]));
-            const merged: Teacher[] = items.map((pub: any) => {
-              const existing = byId.get(pub.id);
-              return {
-                phone: existing?.phone || '',
-                email: existing?.email || '',
-                ...existing,
-                ...pub
-              };
-            });
-            teachersRef.current = merged;
-            saveToStorage('teachers', merged);
-            return merged;
-          });
-        }
-      },
-      onPublicExamsChange: hasExamRouteInLocation()
-        ? undefined
-        : (publicExamsMeta) => {
-            if (publicExamsMeta.length === 0) return;
-            setExams(prev => {
-              const next = [...prev];
-              let changed = false;
-              publicExamsMeta.forEach(ce => {
-                const idx = next.findIndex(
-                  e => e.id.toLowerCase() === ce.id.toLowerCase() || (ce.code && e.code.toLowerCase() === ce.code.toLowerCase())
-                );
-                if (idx >= 0) {
-                  const existing = next[idx];
-                  next[idx] = {
-                    ...existing,
-                    ...ce,
-                    // Preserve already hydrated question objects & images
-                    questions: existing.questions && existing.questions.length > 0 ? existing.questions : ce.questions,
-                    sections: existing.sections && existing.sections.length > 0 ? existing.sections : ce.sections
-                  };
-                  changed = true;
-                } else {
-                  next.unshift(ce);
-                  changed = true;
-                }
-              });
-              if (!changed) return prev;
-              examsRef.current = next;
-              saveToStorage('exams', next);
-              return next;
-            });
-          }
-    });
-
-    // 5. Cross-tab localStorage listener so changes in an Admin tab immediately reflect
-    // in any open Student or Landing Page tab in the same browser
-    const handleCrossTabStorage = (e: StorageEvent) => {
-      if (!e.key || !e.key.startsWith(STORAGE_PREFIX) || !e.newValue) return;
-      const shortKey = e.key.slice(STORAGE_PREFIX.length);
-      try {
-        const parsed = JSON.parse(e.newValue);
-        switch (shortKey) {
-          case 'settings':
-            settingsRef.current = parsed;
-            setSettings(parsed);
-            break;
-          case 'courses':
-            coursesRef.current = parsed;
-            setCourses(parsed);
-            break;
-          case 'testSeries':
-            testSeriesRef.current = parsed;
-            setTestSeries(parsed);
-            break;
-          case 'batches':
-            batchesRef.current = parsed;
-            setBatches(parsed);
-            break;
-          case 'teachers':
-            teachersRef.current = parsed;
-            setTeachers(parsed);
-            break;
-          case 'studyMaterials':
-            studyMaterialsRef.current = parsed;
-            setStudyMaterials(parsed);
-            break;
-          case 'notifications':
-            notificationsRef.current = parsed;
-            setNotifications(parsed);
-            break;
-          case 'folders':
-            foldersRef.current = parsed;
-            setFolders(parsed);
-            break;
-          case 'exams':
-            examsRef.current = parsed;
-            setExams(parsed);
-            break;
-          case 'questions':
-            questionsRef.current = parsed;
-            setQuestions(parsed);
-            break;
-          case 'users':
-            usersRef.current = parsed;
-            setUsers(parsed);
-            break;
-          case 'attempts':
-            setAttempts(parsed);
-            break;
-          case 'attendance':
-            attendanceRef.current = parsed;
-            setAttendance(parsed);
-            break;
-          case 'payments':
-            paymentsRef.current = parsed;
-            setPayments(parsed);
-            break;
-        }
-      } catch {
-        // ignore malformed storage values
-      }
-    };
-    window.addEventListener('storage', handleCrossTabStorage);
-
-    return () => {
-      unsubscribePortal();
-      window.removeEventListener('storage', handleCrossTabStorage);
-    };
   }, []);
 
-  // Dynamically sync browser tab title & favicon with institute settings
+  // Dynamically sync browser tab favicon with custom logo/favicon
   useEffect(() => {
     try {
-      if (settings?.metaTitle?.trim()) {
-        document.title = settings.metaTitle.trim();
-      } else if (settings?.instituteName?.trim()) {
-        document.title = `${settings.instituteName.trim()} — Online Test Portal`;
-      }
       const fav = settings?.faviconUrl || settings?.logoUrl;
       if (fav) {
         let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement | null;
@@ -1812,7 +1425,7 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch {
       // ignore in SSR / environments without document
     }
-  }, [settings?.faviconUrl, settings?.logoUrl, settings?.metaTitle, settings?.instituteName]);
+  }, [settings?.faviconUrl, settings?.logoUrl]);
 
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
     const id = 'toast-' + Math.random().toString(36).substring(2, 9);
@@ -1827,16 +1440,8 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const updateSettings = (newSettings: Partial<InstituteSettings>) => {
-    const next = { ...settingsRef.current, ...newSettings };
-    settingsRef.current = next;
-    saveToStorage('settings', next);
-    setSettings(next);
-    pushAdminMutationToCloud('portal_settings', () => syncPortalSettingsToFirestore(next));
-    showToast(
-      isVerifiedAdminSignedIn()
-        ? 'Institute settings saved & synced live to portal!'
-        : 'Institute settings saved locally (connect Google Cloud Sync to publish across devices).'
-    );
+    setSettings(prev => ({ ...prev, ...newSettings }));
+    showToast('Institute settings saved successfully!');
   };
 
   const addUser = (userData: Omit<User, 'id'>): User => {
@@ -1845,41 +1450,36 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       id: 'usr-' + Date.now(),
       joinedDate: new Date().toISOString().split('T')[0]
     };
-    const next = [newUser, ...usersRef.current];
-    usersRef.current = next;
-    saveToStorage('users', next);
-    setUsers(next);
-    pushAdminMutationToCloud('students', () => syncAdminWorkspaceToFirestore('students', { items: next }));
+    setUsers(prev => [newUser, ...prev]);
     showToast(`User ${newUser.name} added successfully.`);
     return newUser;
   };
 
   const updateUser = (id: string, data: Partial<User>) => {
-    const next = usersRef.current.map(u => (u.id === id ? { ...u, ...data } : u));
-    usersRef.current = next;
-    saveToStorage('users', next);
-    setUsers(next);
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, ...data } : u));
     if (currentUser.id === id) {
       setCurrentUser(prev => ({ ...prev, ...data }));
     }
-    pushAdminMutationToCloud('students', () => syncAdminWorkspaceToFirestore('students', { items: next }));
     showToast('User record updated.');
   };
 
   const deleteUser = (id: string) => {
-    const targetUser = usersRef.current.find(u => u.id === id);
-    const nextUsers = usersRef.current.filter(u => u.id !== id);
-    usersRef.current = nextUsers;
-    saveToStorage('users', nextUsers);
-    setUsers(nextUsers);
+    const targetUser = users.find(u => u.id === id);
+    markDeleted('users', id);
+    setUsers(prev => {
+      const next = prev.filter(u => u.id !== id);
+      saveToStorage('users', next);
+      return next;
+    });
     if (targetUser) {
       setAttempts(prev => {
+        const removed = prev.filter(a => a.studentId === id || a.studentName.toLowerCase() === targetUser.name.toLowerCase());
+        markDeleted('attempts', ...removed.map(a => a.id));
         const next = prev.filter(a => a.studentId !== id && a.studentName.toLowerCase() !== targetUser.name.toLowerCase());
         saveToStorage('attempts', next);
         return next;
       });
     }
-    pushAdminMutationToCloud('students', () => syncAdminWorkspaceToFirestore('students', { items: nextUsers }));
     showToast(`Student ${targetUser?.name || ''} deleted.`);
   };
 
@@ -1888,29 +1488,18 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ...batchData,
       id: 'batch-' + Date.now()
     };
-    const next = [newBatch, ...batchesRef.current];
-    batchesRef.current = next;
-    saveToStorage('batches', next);
-    setBatches(next);
-    pushAdminMutationToCloud('batches', () => syncPortalCatalogToFirestore('batches', next));
+    setBatches(prev => [newBatch, ...prev]);
     showToast(`Batch "${newBatch.name}" created successfully.`);
   };
 
   const updateBatch = (id: string, data: Partial<Batch>) => {
-    const next = batchesRef.current.map(b => (b.id === id ? { ...b, ...data } : b));
-    batchesRef.current = next;
-    saveToStorage('batches', next);
-    setBatches(next);
-    pushAdminMutationToCloud('batches', () => syncPortalCatalogToFirestore('batches', next));
+    setBatches(prev => prev.map(b => b.id === id ? { ...b, ...data } : b));
     showToast('Batch updated.');
   };
 
   const deleteBatch = (id: string) => {
-    const next = batchesRef.current.filter(b => b.id !== id);
-    batchesRef.current = next;
-    saveToStorage('batches', next);
-    setBatches(next);
-    pushAdminMutationToCloud('batches', () => syncPortalCatalogToFirestore('batches', next));
+    markDeleted('batches', id);
+    setBatches(prev => prev.filter(b => b.id !== id));
     showToast('Batch deleted.');
   };
 
@@ -1919,44 +1508,18 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ...teacherData,
       id: 'teacher-' + Date.now()
     };
-    const next = [newTeacher, ...teachersRef.current];
-    teachersRef.current = next;
-    saveToStorage('teachers', next);
-    setTeachers(next);
-    pushAdminMutationToCloud('teachers', async () => {
-      await Promise.all([
-        syncPortalCatalogToFirestore('teachers_public', next),
-        syncAdminWorkspaceToFirestore('teachers_private', { items: next })
-      ]);
-    });
+    setTeachers(prev => [newTeacher, ...prev]);
     showToast(`Faculty "${newTeacher.name}" added successfully.`);
   };
 
   const updateTeacher = (id: string, data: Partial<Teacher>) => {
-    const next = teachersRef.current.map(t => (t.id === id ? { ...t, ...data } : t));
-    teachersRef.current = next;
-    saveToStorage('teachers', next);
-    setTeachers(next);
-    pushAdminMutationToCloud('teachers', async () => {
-      await Promise.all([
-        syncPortalCatalogToFirestore('teachers_public', next),
-        syncAdminWorkspaceToFirestore('teachers_private', { items: next })
-      ]);
-    });
+    setTeachers(prev => prev.map(t => t.id === id ? { ...t, ...data } : t));
     showToast('Faculty updated.');
   };
 
   const deleteTeacher = (id: string) => {
-    const next = teachersRef.current.filter(t => t.id !== id);
-    teachersRef.current = next;
-    saveToStorage('teachers', next);
-    setTeachers(next);
-    pushAdminMutationToCloud('teachers', async () => {
-      await Promise.all([
-        syncPortalCatalogToFirestore('teachers_public', next),
-        syncAdminWorkspaceToFirestore('teachers_private', { items: next })
-      ]);
-    });
+    markDeleted('teachers', id);
+    setTeachers(prev => prev.filter(t => t.id !== id));
     showToast('Faculty removed.');
   };
 
@@ -1986,7 +1549,6 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     questionsRef.current = nextQuestions;
     saveToStorage('questions', nextQuestions);
     setQuestions(nextQuestions);
-    pushAdminMutationToCloud('question_bank', () => syncAdminWorkspaceToFirestore('question_bank', { items: nextQuestions }));
     showToast(`Question ${newQ.code} added to Question Bank.`);
     return newQ;
   };
@@ -2047,32 +1609,28 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           body: JSON.stringify(updatedEx)
         }).catch(() => {});
       } catch {}
-      pushAdminMutationToCloud('update_exam_question', () =>
-        syncExamAndQuestionsToFirestore(updatedEx, updatedEx.questions || nextQuestions)
-      );
+      syncExamAndQuestionsToFirestore(updatedEx, updatedEx.questions || nextQuestions).catch(() => {});
     });
-    pushAdminMutationToCloud('question_bank', () =>
-      syncAdminWorkspaceToFirestore('question_bank', { items: nextQuestions })
-    );
 
     showToast('Question updated.');
   };
 
   const deleteQuestion = (id: string) => {
+    const targetQuestion = questionsRef.current.find(q => q.id === id);
+    markDeleted('questions', id, targetQuestion?.code || '');
     const next = questionsRef.current.filter(q => q.id !== id);
     questionsRef.current = next;
     saveToStorage('questions', next);
     setQuestions(next);
-    pushAdminMutationToCloud('question_bank', () => syncAdminWorkspaceToFirestore('question_bank', { items: next }));
     showToast('Question deleted.');
   };
 
   const importQuestions = (newQuestions: Question[]) => {
-    const next = [...newQuestions, ...questionsRef.current];
-    questionsRef.current = next;
-    saveToStorage('questions', next);
-    setQuestions(next);
-    pushAdminMutationToCloud('question_bank', () => syncAdminWorkspaceToFirestore('question_bank', { items: next }));
+    setQuestions(prev => {
+      const next = [...newQuestions, ...prev];
+      saveToStorage('questions', next);
+      return next;
+    });
     showToast(`${newQuestions.length} questions imported successfully!`);
   };
 
@@ -2083,40 +1641,38 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       examCount: 0,
       createdAt: new Date().toISOString().split('T')[0]
     };
-    const next = [newFolder, ...foldersRef.current];
-    foldersRef.current = next;
-    saveToStorage('folders', next);
-    setFolders(next);
-    pushAdminMutationToCloud('add_folder', () => syncFolderToFirestore(newFolder));
+    setFolders(prev => {
+      const next = [newFolder, ...prev];
+      saveToStorage('folders', next);
+      return next;
+    });
+    syncFolderToFirestore(newFolder).catch(() => {});
     showToast(`Exam folder "${newFolder.name}" created.`);
     return newFolder;
   };
 
   const updateFolder = (id: string, data: Partial<ExamFolder>) => {
-    let updatedFolder: ExamFolder | null = null;
-    const next = foldersRef.current.map(f => {
+    setFolders(prev => prev.map(f => {
       if (f.id === id) {
-        updatedFolder = { ...f, ...data };
-        return updatedFolder;
+        const updated = { ...f, ...data };
+        syncFolderToFirestore(updated).catch(() => {});
+        return updated;
       }
       return f;
-    });
-    foldersRef.current = next;
-    saveToStorage('folders', next);
-    setFolders(next);
-    if (updatedFolder) {
-      const target = updatedFolder;
-      pushAdminMutationToCloud('update_folder', () => syncFolderToFirestore(target));
-    }
+    }));
     showToast('Folder updated.');
   };
 
   const deleteFolder = (id: string) => {
+    markDeleted('folders', id);
     const next = foldersRef.current.filter(f => f.id !== id);
     foldersRef.current = next;
     saveToStorage('folders', next);
     setFolders(next);
-    pushAdminMutationToCloud('delete_folder', () => deleteFolderFromFirestore(id));
+    deleteFolderFromFirestore(id).catch(err => {
+      const info = classifyFirestoreSyncError(err);
+      showToast(info.userMessage || 'Folder deleted locally, but cloud deletion failed.', 'error');
+    });
     showToast('Folder deleted.');
   };
 
@@ -2156,9 +1712,7 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         body: JSON.stringify(newExam)
       }).catch(() => {});
     } catch {}
-    pushAdminMutationToCloud('add_exam', () =>
-      syncExamAndQuestionsToFirestore(newExam, [...currentQs, ...finalQuestions])
-    );
+    syncExamAndQuestionsToFirestore(newExam, [...currentQs, ...finalQuestions]).catch(() => {});
     showToast(`Exam "${newExam.title}" created successfully!`);
     return newExam;
   };
@@ -2220,9 +1774,7 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           body: JSON.stringify(syncedExam)
         }).catch(() => {});
       } catch {}
-      pushAdminMutationToCloud('attach_exam_questions', () =>
-        syncExamAndQuestionsToFirestore(syncedExam, [...questionsRef.current, ...(syncedExam.questions || [])])
-      );
+      syncExamAndQuestionsToFirestore(syncedExam, [...questionsRef.current, ...(syncedExam.questions || [])]).catch(() => {});
     }
   };
 
@@ -2266,19 +1818,22 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           body: JSON.stringify(targetExam)
         }).catch(() => {});
       } catch {}
-      pushAdminMutationToCloud('update_exam', () =>
-        syncExamAndQuestionsToFirestore(targetExam, currentQs)
-      );
+      syncExamAndQuestionsToFirestore(targetExam, currentQs).catch(() => {});
     }
     showToast('Exam updated.');
   };
 
   const deleteExam = (id: string) => {
+    const targetExam = examsRef.current.find(e => e.id === id);
+    markDeleted('exams', id, targetExam?.code || '');
     const next = examsRef.current.filter(e => e.id !== id);
     examsRef.current = next;
     saveToStorage('exams', next);
     setExams(next);
-    pushAdminMutationToCloud('delete_exam', () => deleteExamFromFirestore(id));
+    deleteExamFromFirestore(id).catch(err => {
+      const info = classifyFirestoreSyncError(err);
+      showToast(info.userMessage || 'Exam deleted locally, but cloud deletion failed.', 'error');
+    });
     showToast('Exam deleted.');
   };
 
@@ -2294,21 +1849,13 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const updateAttempt = (id: string, data: Partial<ExamAttempt>) => {
-    setAttempts(prev => {
-      const next = prev.map(a => (a.id === id ? { ...a, ...data } : a));
-      saveToStorage('attempts', next);
-      return next;
-    });
+    setAttempts(prev => prev.map(a => a.id === id ? { ...a, ...data } : a));
     showToast('Submission updated.');
   };
 
   const deleteAttempt = (id: string) => {
-    setAttempts(prev => {
-      const next = prev.filter(a => a.id !== id);
-      saveToStorage('attempts', next);
-      return next;
-    });
-    pushAdminMutationToCloud('delete_attempt', () => deleteAttemptFromFirestore(id));
+    markDeleted('attempts', id);
+    setAttempts(prev => prev.filter(a => a.id !== id));
     showToast('Attempt record removed.');
   };
 
@@ -2319,12 +1866,10 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       date,
       records
     };
-    const filtered = attendanceRef.current.filter(r => !(r.batchId === batchId && r.date === date));
-    const next = [newRec, ...filtered];
-    attendanceRef.current = next;
-    saveToStorage('attendance', next);
-    setAttendance(next);
-    pushAdminMutationToCloud('attendance', () => syncAdminWorkspaceToFirestore('attendance', { items: next }));
+    setAttendance(prev => {
+      const filtered = prev.filter(r => !(r.batchId === batchId && r.date === date));
+      return [newRec, ...filtered];
+    });
     showToast(`Attendance marked for ${records.length} students on ${date}.`);
   };
 
@@ -2335,20 +1880,13 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       uploadedAt: new Date().toISOString().split('T')[0],
       downloadCount: 0
     };
-    const next = [newMat, ...studyMaterialsRef.current];
-    studyMaterialsRef.current = next;
-    saveToStorage('studyMaterials', next);
-    setStudyMaterials(next);
-    pushAdminMutationToCloud('study_materials', () => syncPortalCatalogToFirestore('study_materials', next));
+    setStudyMaterials(prev => [newMat, ...prev]);
     showToast(`Study material "${newMat.title}" uploaded.`);
   };
 
   const deleteStudyMaterial = (id: string) => {
-    const next = studyMaterialsRef.current.filter(m => m.id !== id);
-    studyMaterialsRef.current = next;
-    saveToStorage('studyMaterials', next);
-    setStudyMaterials(next);
-    pushAdminMutationToCloud('study_materials', () => syncPortalCatalogToFirestore('study_materials', next));
+    markDeleted('studyMaterials', id);
+    setStudyMaterials(prev => prev.filter(m => m.id !== id));
     showToast('Study material deleted.');
   };
 
@@ -2358,20 +1896,13 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       id: 'notif-' + Date.now(),
       createdAt: new Date().toLocaleString()
     };
-    const next = [newNotif, ...notificationsRef.current];
-    notificationsRef.current = next;
-    saveToStorage('notifications', next);
-    setNotifications(next);
-    pushAdminMutationToCloud('notifications', () => syncPortalCatalogToFirestore('notifications', next));
+    setNotifications(prev => [newNotif, ...prev]);
     showToast('Notification published to students.');
   };
 
   const deleteNotification = (id: string) => {
-    const next = notificationsRef.current.filter(n => n.id !== id);
-    notificationsRef.current = next;
-    saveToStorage('notifications', next);
-    setNotifications(next);
-    pushAdminMutationToCloud('notifications', () => syncPortalCatalogToFirestore('notifications', next));
+    markDeleted('notifications', id);
+    setNotifications(prev => prev.filter(n => n.id !== id));
     showToast('Notification removed.');
   };
 
@@ -2381,29 +1912,18 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       id: 'crs-' + Date.now(),
       enrolledCount: 0
     };
-    const next = [newCourse, ...coursesRef.current];
-    coursesRef.current = next;
-    saveToStorage('courses', next);
-    setCourses(next);
-    pushAdminMutationToCloud('courses', () => syncPortalCatalogToFirestore('courses', next));
+    setCourses(prev => [newCourse, ...prev]);
     showToast(`Course "${newCourse.title}" created.`);
   };
 
   const updateCourse = (id: string, data: Partial<Course>) => {
-    const next = coursesRef.current.map(c => (c.id === id ? { ...c, ...data } : c));
-    coursesRef.current = next;
-    saveToStorage('courses', next);
-    setCourses(next);
-    pushAdminMutationToCloud('courses', () => syncPortalCatalogToFirestore('courses', next));
+    setCourses(prev => prev.map(c => c.id === id ? { ...c, ...data } : c));
     showToast('Course updated.');
   };
 
   const deleteCourse = (id: string) => {
-    const next = coursesRef.current.filter(c => c.id !== id);
-    coursesRef.current = next;
-    saveToStorage('courses', next);
-    setCourses(next);
-    pushAdminMutationToCloud('courses', () => syncPortalCatalogToFirestore('courses', next));
+    markDeleted('courses', id);
+    setCourses(prev => prev.filter(c => c.id !== id));
     showToast('Course deleted.');
   };
 
@@ -2413,69 +1933,47 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       id: 'ts-' + Date.now(),
       enrolledCount: 0
     };
-    const next = [newTS, ...testSeriesRef.current];
-    testSeriesRef.current = next;
-    saveToStorage('testSeries', next);
-    setTestSeries(next);
-    pushAdminMutationToCloud('test_series', () => syncPortalCatalogToFirestore('test_series', next));
+    setTestSeries(prev => [newTS, ...prev]);
     showToast(`Test Series "${newTS.title}" created.`);
   };
 
   const updateTestSeries = (id: string, data: Partial<TestSeries>) => {
-    const next = testSeriesRef.current.map(t => (t.id === id ? { ...t, ...data } : t));
-    testSeriesRef.current = next;
-    saveToStorage('testSeries', next);
-    setTestSeries(next);
-    pushAdminMutationToCloud('test_series', () => syncPortalCatalogToFirestore('test_series', next));
+    setTestSeries(prev => prev.map(t => t.id === id ? { ...t, ...data } : t));
     showToast('Test Series updated.');
   };
 
   const deleteTestSeries = (id: string) => {
-    const next = testSeriesRef.current.filter(t => t.id !== id);
-    testSeriesRef.current = next;
-    saveToStorage('testSeries', next);
-    setTestSeries(next);
-    pushAdminMutationToCloud('test_series', () => syncPortalCatalogToFirestore('test_series', next));
+    markDeleted('testSeries', id);
+    setTestSeries(prev => prev.filter(t => t.id !== id));
     showToast('Test series deleted.');
   };
 
   const addPayment = (pData: Omit<PaymentTransaction, 'id' | 'receiptNo' | 'date'>): PaymentTransaction => {
-    const receiptNo = `REC-GMI-2025-${(paymentsRef.current.length + 1).toString().padStart(3, '0')}`;
+    const receiptNo = `REC-GMI-2025-${(payments.length + 1).toString().padStart(3, '0')}`;
     const newPay: PaymentTransaction = {
       ...pData,
       id: 'pay-' + Date.now(),
       receiptNo,
       date: new Date().toLocaleString()
     };
-    const next = [newPay, ...paymentsRef.current];
-    paymentsRef.current = next;
-    saveToStorage('payments', next);
-    setPayments(next);
-    pushAdminMutationToCloud('payments', () => syncAdminWorkspaceToFirestore('payments', { items: next }));
+    setPayments(prev => [newPay, ...prev]);
     showToast(`Payment of ₹${newPay.amount.toLocaleString()} recorded successfully!`);
     return newPay;
   };
 
   const verifyPayment = (id: string) => {
-    const next = paymentsRef.current.map(p => (p.id === id ? { ...p, status: 'Verified' } : p));
-    paymentsRef.current = next;
-    saveToStorage('payments', next);
-    setPayments(next);
-    pushAdminMutationToCloud('payments', () => syncAdminWorkspaceToFirestore('payments', { items: next }));
+    setPayments(prev => prev.map(p => p.id === id ? { ...p, status: 'Verified' } : p));
     showToast('Payment verified successfully.');
   };
 
   const deletePayment = (id: string) => {
-    const next = paymentsRef.current.filter(p => p.id !== id);
-    paymentsRef.current = next;
-    saveToStorage('payments', next);
-    setPayments(next);
-    pushAdminMutationToCloud('payments', () => syncAdminWorkspaceToFirestore('payments', { items: next }));
+    markDeleted('payments', id);
+    setPayments(prev => prev.filter(p => p.id !== id));
     showToast('Payment approval record deleted.');
   };
 
   const togglePaymentStatus = (id: string, reason?: string) => {
-    const next = paymentsRef.current.map(p => {
+    setPayments(prev => prev.map(p => {
       if (p.id === id) {
         const isVerified = p.status === 'SUCCESS' || p.status === 'Verified' || p.status === 'Success';
         const nextStatus = isVerified ? 'REJECTED' : 'SUCCESS';
@@ -2487,33 +1985,25 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         };
       }
       return p;
-    });
-    paymentsRef.current = next;
-    saveToStorage('payments', next);
-    setPayments(next);
-    pushAdminMutationToCloud('payments', () => syncAdminWorkspaceToFirestore('payments', { items: next }));
+    }));
     showToast('Payment status updated.');
   };
 
   const clearRejectedPayments = () => {
-    const rejectedCount = paymentsRef.current.filter(p => p.status === 'REJECTED' || p.status === 'Failed').length;
+    const rejectedCount = payments.filter(p => p.status === 'REJECTED' || p.status === 'Failed').length;
     if (rejectedCount === 0) {
       showToast('No rejected payments to clear.');
       return;
     }
-    const next = paymentsRef.current.filter(p => p.status !== 'REJECTED' && p.status !== 'Failed');
-    paymentsRef.current = next;
-    saveToStorage('payments', next);
-    setPayments(next);
-    pushAdminMutationToCloud('payments', () => syncAdminWorkspaceToFirestore('payments', { items: next }));
+    markDeleted('payments', ...payments
+      .filter(p => p.status === 'REJECTED' || p.status === 'Failed')
+      .map(p => p.id));
+    setPayments(prev => prev.filter(p => p.status !== 'REJECTED' && p.status !== 'Failed'));
     showToast(`Removed ${rejectedCount} rejected payment record(s).`);
   };
 
   const resetPaymentsToDefault = () => {
-    paymentsRef.current = INITIAL_PAYMENTS;
-    saveToStorage('payments', INITIAL_PAYMENTS);
     setPayments(INITIAL_PAYMENTS);
-    pushAdminMutationToCloud('payments', () => syncAdminWorkspaceToFirestore('payments', { items: INITIAL_PAYMENTS }));
     showToast('Reset payments ledger to default records.');
   };
 
@@ -2691,6 +2181,25 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     startExamForStudent(targetExamObj.id, student);
   };
 
+  const loginAdmin = (password: string, emailOrUsername?: string): { success: boolean; error?: string } => {
+    const expectedPassword = (settings.adminPassword || 'admin123').trim();
+    if (password.trim() === expectedPassword) {
+      setIsAdminAuthenticated(true);
+      saveToStorage('admin_auth', true);
+      const adminUser = users.find(u => u.role === 'admin') || INITIAL_USERS[0];
+      setCurrentUser(adminUser);
+      setAdminLoginModalOpen(false);
+      setPortalModeState('admin');
+      setActiveAdminTab('Dashboard');
+      showToast(`Admin access granted. Welcome, ${adminUser.name}!`);
+      return { success: true };
+    }
+    return {
+      success: false,
+      error: 'Invalid administrator password. Please check your credentials.'
+    };
+  };
+
   const signInAdminWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
@@ -2710,8 +2219,7 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setAdminLoginModalOpen(false);
       setPortalModeState('admin');
       setActiveAdminTab('Dashboard');
-      showToast('Google Cloud Sync connected! Syncing exams & question images automatically...');
-      void performAdminCloudAutoSync({ notifySuccess: true });
+      showToast('Google Cloud Sync connected! Exams & image questions now sync across all mobile links.');
       return { success: true };
     } catch (err: any) {
       const code = String(err?.code || '');
@@ -2745,37 +2253,6 @@ export const PortalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         error: err?.message || 'Google Sign-In was cancelled or failed.'
       };
     }
-  };
-
-  const loginAdmin = (password: string, _emailOrUsername?: string): { success: boolean; error?: string } => {
-    const expectedPassword = (settings.adminPassword || 'admin123').trim();
-    if (password.trim() === expectedPassword) {
-      setIsAdminAuthenticated(true);
-      saveToStorage('admin_auth', true);
-      const adminUser = users.find(u => u.role === 'admin') || INITIAL_USERS[0];
-      setCurrentUser(adminUser);
-      setAdminLoginModalOpen(false);
-      setPortalModeState('admin');
-      setActiveAdminTab('Dashboard');
-
-      // Automatically trigger Cloud Sync immediately upon Admin login
-      if (isVerifiedAdminSignedIn()) {
-        showToast(`Welcome, ${adminUser.name}! Running automatic Cloud Sync...`);
-        void performAdminCloudAutoSync({ notifySuccess: true });
-      } else {
-        showToast(`Welcome, ${adminUser.name}! Connecting Google Cloud Sync...`);
-        void signInAdminWithGoogle().then(res => {
-          if (!res.success && res.error) {
-            showToast(res.error, 'error');
-          }
-        });
-      }
-      return { success: true };
-    }
-    return {
-      success: false,
-      error: 'Invalid administrator password. Please check your credentials.'
-    };
   };
 
   const logoutAdmin = () => {
